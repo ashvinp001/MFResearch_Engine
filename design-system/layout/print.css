@@ -1,0 +1,14 @@
+/* Printing a report: only #print-root is printed, colours preserved, no motion. */
+#print-root { display: none; }
+
+@media print {
+  html, body { background: var(--surface) !important; margin: 0; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,28 @@
+# Generated test output
+tests/out/
+tests/last-results.txt
+
+# Real client statements used for local testing — never commit
+tests/pdf-fixtures/local/
+
+# API credentials (e.g. Pulse Labs partner key) — local only, never commit
+.secrets/
+
+# Local-only instructions for Claude Code — never commit
+CLAUDE.md
+
+# Kept local, not pushed to GitHub (owner's decision)
+database/
+MF_Platform_Specification.md
+
+# Reference report PDFs — contain real client data, local only
+Portfolio Review & Recommandation Updated.pdf
+Sample Portfolio Review.pdf
+
+# Python bytecode
+__pycache__/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

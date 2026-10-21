@@ -1,0 +1,16 @@
+/* Print styles for synthetic CAS statements (rendered to real PDFs by Edge). */
+@page { size: A4; margin: 14mm; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; margin: 0; }
+.page { page-break-after: always; }
+.page:last-child { page-break-after: auto; }
+h1 { font-size: 13pt; margin: 0 0 4px; }
+.line { white-space: nowrap; margin: 3px 0; }
+.row { display: flex; gap: 22px; white-space: nowrap; margin: 3px 0; }
+.amc { font-weight: bold; font-size: 10pt; margin-top: 12px; }
+.scheme { font-weight: bold; margin-top: 6px; }
+table { border-collapse: collapse; width: 100%; margin: 4px 0 10px; }
+th, td { padding: 3px 5px; border: 0.5pt solid #888; }
+th { font-weight: bold; vertical-align: middle; text-align: center; }
+td.n { text-align: right; white-space: nowrap; }
+.narrow th { width: 9%; }
+.section { font-weight: bold; margin-top: 10px; }

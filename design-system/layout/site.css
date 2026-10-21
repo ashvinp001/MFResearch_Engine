@@ -1,0 +1,192 @@
+/* Website shell: header, hero band, footer, entrance motion. Tokens only. */
+
+/* ---------- Header ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid var(--border);
+  transition: box-shadow 0.2s ease;
+}
+.site-header.is-scrolled { box-shadow: var(--shadow-header); }
+/* Brand strip in the logo's colours */
+.site-header::before { content: ""; display: block; height: 4px; background: var(--grad-divider); }
+/* Logo · colour-coded tabs on the left · action right */
+.site-header-inner {
+  max-width: var(--content-max);
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 var(--page-gutter);
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.site-brand { display: inline-flex; text-decoration: none; }
+.site-header-divider { width: 1px; height: 32px; background: var(--border-strong); }
+.site-nav { display: flex; gap: 4px; justify-self: start; }
+.site-nav-link {
+  --tab-accent: var(--navy);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.site-nav-icon {
+  width: 24px; height: 24px;
+  display: grid; place-content: center;
+  border-radius: 50%;
+  color: var(--tab-accent);
+  background: color-mix(in srgb, var(--tab-accent) 12%, var(--surface));
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.site-nav-link:hover { color: var(--color-primary); background: color-mix(in srgb, var(--tab-accent) 7%, var(--surface)); }
+.site-nav-link.is-active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--tab-accent) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--tab-accent) 35%, var(--surface));
+}
+.site-nav-link.is-active .site-nav-icon { color: var(--text-on-primary); background: var(--tab-accent); }
+.site-nav-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-on-primary);
+  background: var(--tab-accent);
+}
+.site-header-actions { display: flex; align-items: center; justify-self: end; gap: var(--sp-2); }
+.site-cta { text-decoration: none; }
+.site-menu-toggle { display: none; width: 40px; height: 40px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; padding: 10px 9px; }
+.site-menu-toggle span { display: block; height: 2px; background: var(--color-primary); border-radius: 2px; }
+.site-menu-toggle span + span { margin-top: 5px; }
+
+@media (max-width: 860px) {
+  .site-nav {
+    display: none;
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    flex-direction: column;
+    justify-self: stretch;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: var(--sp-2) var(--sp-4) var(--sp-4);
+    box-shadow: var(--shadow-raised);
+  }
+  .site-header.is-open .site-nav { display: flex; }
+  .site-menu-toggle { display: block; }
+  .site-header-inner { grid-template-columns: 1fr auto; height: 64px; }
+  .site-header-divider { display: none; }
+  .site-nav-link { padding: 10px 12px; border-radius: var(--r-md); }
+  .site-cta { display: none; }
+}
+
+/* ---------- Hero band ---------- */
+.site-band {
+  position: relative;
+  overflow: hidden;
+  background: var(--grad-band);
+  color: var(--on-dark-primary);
+}
+.site-band::before {
+  /* fine dotted texture */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(180deg, #000 30%, transparent 100%);
+  pointer-events: none;
+}
+.site-band::after {
+  /* soft glowing orb */
+  content: "";
+  position: absolute;
+  width: 420px; height: 420px;
+  right: -120px; top: -160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(174, 212, 149, 0.35), transparent 65%);
+  filter: blur(8px);
+  animation: site-float 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes site-float { to { transform: translate(-40px, 30px) scale(1.08); } }
+.site-band-inner { position: relative; z-index: 1; max-width: var(--content-max); margin: 0 auto; padding: var(--sp-6) var(--page-gutter); }
+.site-band h1, .site-band h2 { color: var(--on-dark-primary); }
+.site-band .ds-eyebrow { color: var(--lime); }
+
+.site-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--on-dark-chip);
+  border: 1px solid var(--on-dark-chip-border);
+  color: var(--on-dark-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.site-chip .ds-icon { color: var(--lime); }
+
+.site-gradient-text {
+  background: var(--grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- Footer ---------- */
+/* Full-height column: the footer sits at the bottom even on short pages. Content
+   keeps its natural height (never stretched), so zooming out shows a normal page. */
+.site { display: flex; flex-direction: column; min-height: 100vh; }
+.site-view { flex: 1 0 auto; }
+
+.site-footer { background: var(--navy-deep); color: var(--on-dark-secondary); margin-top: var(--sp-6); }
+.site-footer-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--page-gutter) var(--sp-5);
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: 3fr 1fr;
+}
+.site-footer-brand p { margin: var(--sp-3) 0 0; max-width: 320px; font-size: 14px; }
+.site-footer-title { font-family: var(--font-display); font-weight: 700; color: var(--on-dark-primary); margin-bottom: var(--sp-2); }
+.site-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.site-footer a { color: var(--on-dark-secondary); text-decoration: none; font-size: 14px; }
+.site-footer a:hover { color: var(--on-dark-primary); }
+.site-footer-legal {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--sp-4) var(--page-gutter);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  color: var(--on-dark-secondary);
+}
+.site-footer-name { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--on-dark-primary); letter-spacing: 0.01em; }
+.ds-logo-light .ds-logo-wordmark { color: var(--on-dark-primary); }
+.ds-logo-light .ds-logo-tld { color: var(--lime); }@media (max-width: 760px) { .site-footer-inner { grid-template-columns: 1fr 1fr; } .site-footer-brand { grid-column: 1 / -1; } }
+
+/* ---------- Entrance motion ---------- */
+.site-reveal { animation: site-reveal 0.7s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes site-reveal { from { opacity: 0; transform: translateY(14px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .site-reveal, .site-band::after { animation: none; }
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workflow Preview</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="../design-system/index.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    // Opens the REAL workflow at any step (test aid):
+    //   ?file=cams.pdf&step=1..4[&demo=1]          detailed flow on a fixture CAS (demo = sample choices)
+    //   ?file=cams.pdf&report=snapshot             One-Pager on a fixture CAS
+    //   ?sample=1                                  One-Pager with the Sample Portfolio Review data
+    //   ?sample=1&report=detailed&step=4&demo=1    Detailed flow with the sample data + fund analytics
+    import * as pdfjs from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+    import { analyzeCasPdf, holdingKey } from "../calculation-engine/index.js";
+    import { mountSiteShell } from "../app/shell.js";
+    import { mountPortfolioAnalyzer } from "../app/portfolio-analyzer/workflow.js";
+
+    const params = new URLSearchParams(location.search);
+    const step = Number(params.get("step") ?? 1);
+    const shell = mountSiteShell(document.getElementById("app"));
+    shell.setActive("#/portfolio-analyzer");
+    const app = mountPortfolioAnalyzer(shell.view);
+
+    let portfolio;
+    let fundData;
+    if (params.get("sample")) {
+      const sample = await import("./sample-snapshot.js");
+      portfolio = sample.samplePortfolio();
+      fundData = sample.SAMPLE_FUND_DATA;
+      if (params.get("many")) {
+        // Long-list test: every fund repeated in a second folio (26 holdings).
+        portfolio.holdings = portfolio.holdings.flatMap((h) => [h, { ...structuredClone(h), folio: "7654321", schemeName: `${h.schemeName} (Folio 2)` }]);
+      }
+      if (params.get("report") !== "detailed") {
+        await app.openSnapshot(portfolio, { fundData, settings: sample.SAMPLE_SETTINGS });
+      }
+    } else {
+      const file = params.get("file") ?? "cams.pdf";
+      portfolio = await analyzeCasPdf({ data: await (await fetch(`pdf-fixtures/${file}`)).arrayBuffer(), fileName: file, pdfjs });
+      if (params.get("report") === "snapshot") await app.openSnapshot(portfolio);
+    }
+
+    const detailed = params.get("sample") ? params.get("report") === "detailed" : params.get("report") !== "snapshot";
+    if (detailed) {
+      const store = await app.openPortfolio(portfolio, 1, { fundData });
+      if (params.get("demo")) {
+        const active = portfolio.holdings.filter((h) => h.status === "active");
+        const cycle = ["invest", "hold", "invest", "sell"];
+        store.state.salutation = "Ms.";
+        active.forEach((h, i) => { store.state.verdicts[holdingKey(h)] = cycle[i % cycle.length]; });
+        const pickable = active
+          .filter((h, i) => cycle[i % cycle.length] !== "sell")
+          .filter((h, i, list) => list.findIndex((o) => o.isin === h.isin) === i)
+          .slice(0, 2);
+        store.state.recommended = {
+          amount: 1000000,
+          rows: [
+            ...pickable.map((h, i) => ({ fundId: `h:${holdingKey(h)}`, name: h.schemeName, isin: h.isin, pct: i === 0 ? "40" : "33.33" })),
+            { fundId: "other", name: "Mirae Asset Large & Midcap Fund - Direct Plan - Growth", isin: "INF769K01EG9", pct: pickable.length === 2 ? "26.67" : "60" },
+          ],
+        };
+      }
+      app.goTo(step);
+    }
+  </script>
+</body>
+</html>

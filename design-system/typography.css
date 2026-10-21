@@ -1,0 +1,31 @@
+/* Typography roles (Project_Specification_TEMP.md §3.2). Fonts load in index.html via Google Fonts. */
+body {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+h1, h2, h3, .ds-display {
+  font-family: var(--font-display);
+  color: var(--color-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+h1 { font-size: var(--fs-page-title); font-weight: 700; }
+h2 { font-size: var(--fs-section-title); font-weight: 700; }
+
+.ds-eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-info);
+}
+
+.ds-muted { color: var(--text-muted); }
+.ds-small { font-size: var(--fs-small); }
+.ds-num { font-variant-numeric: tabular-nums; }
+.ds-mono { font-family: Consolas, "SFMono-Regular", monospace; font-size: 0.92em; }

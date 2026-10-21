@@ -1,0 +1,36 @@
+/* AlertDialog — explains a problem and offers the next step. Tokens only. */
+
+.ad-dialog {
+  --ad-tone: var(--color-warning);
+  --ad-tint: var(--surface-tint-amber);
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: none;
+  border-top: 4px solid var(--ad-tone);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  color: var(--text-primary);
+}
+.ad-dialog.is-negative { --ad-tone: var(--color-negative); --ad-tint: var(--surface-tint-red); }
+.ad-dialog[open] { animation: site-reveal 0.3s var(--ease-out); }
+.ad-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
+
+.ad-head { display: grid; grid-template-columns: auto 1fr auto; gap: var(--sp-3); align-items: start; padding: 22px 24px 8px; }
+.ad-icon { width: 44px; height: 44px; display: grid; place-content: center; border-radius: 50%; color: var(--ad-tone); background: var(--ad-tint); }
+.ad-head h2 { font-size: 21px; font-weight: 800; margin-top: 2px; }
+
+.ad-body { padding: 4px 24px 8px; }
+.ad-text { margin: 0 0 12px; color: var(--text-secondary); }
+.ad-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ad-items li {
+  display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start;
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--ad-tint); color: var(--text-primary); font-size: 14px; line-height: 1.5;
+}
+.ad-items .ds-icon { color: var(--ad-tone); margin-top: 3px; }
+.ad-note { display: flex; gap: 6px; align-items: flex-start; margin: 12px 0 0; font-size: 13px; color: var(--text-muted); }
+.ad-note .ds-icon { flex: none; margin-top: 2px; }
+
+.ad-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: 14px 24px 22px; flex-wrap: wrap; }

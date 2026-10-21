@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CAS Diagnostic</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f4f7fc; color: #18233a; }
+    h1 { font-size: 20px; margin: 0 0 4px; color: #14346b; }
+    p.note { margin: 0 0 14px; color: #46536a; font-size: 14px; }
+    .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #fff; padding: 12px; border-radius: 10px; border: 1px solid #dfe7f4; }
+    input[type=text], input[type=password] { padding: 8px 10px; border: 1px solid #c6d3e8; border-radius: 6px; font-size: 14px; }
+    pre { background: #fff; border: 1px solid #dfe7f4; border-radius: 10px; padding: 12px; font-size: 12px; white-space: pre-wrap; margin-top: 12px; }
+    .hit { background: #fff3c4; }
+  </style>
+</head>
+<body>
+  <h1>CAS diagnostic</h1>
+  <p class="note">Shows exactly what the app reads from a CAS. The file is read inside this browser only — nothing is uploaded.</p>
+  <div class="bar">
+    <input type="file" id="file" accept=".pdf,application/pdf">
+    <input type="password" id="password" placeholder="PDF password (if any)">
+    <input type="text" id="filter" placeholder="Show section, e.g. ICICI" value="">
+    <button id="run">Read</button>
+  </div>
+  <pre id="results">Choose a CAS PDF and press Read.</pre>
+<script type="module">
+  // Debug aid. Also supports ?file=nsdl.pdf to dump a test fixture.
+  import * as pdfjs from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+  import { extractStructuredText } from "../calculation-engine/cas/extract-text.js";
+  import { parseCasDocument } from "../calculation-engine/index.js";
+  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+
+  const out = document.getElementById("results");
+
+  async function dump(data, password, filter) {
+    const doc = await extractStructuredText({ data, password, pdfjs });
+    const lines = doc.pages.flatMap((page) => [
+      `=== page ${page.pageNumber}`,
+      ...page.rows.map((row) => `y=${row.y.toFixed(1)} | ` + row.cells.map((c) => `[${c.x.toFixed(0)}-${c.right.toFixed(0)}] ${c.str}`).join("  ")),
+    ]);
+
+    // With a filter: show ~40 lines after each matching line (the section).
+    let shown = lines;
+    if (filter) {
+      const keep = new Set();
+      lines.forEach((line, i) => { if (line.toLowerCase().includes(filter.toLowerCase())) for (let k = i; k < Math.min(lines.length, i + 40); k++) keep.add(k); });
+      shown = lines.filter((_, i) => keep.has(i));
+    }
+
+    let parsed = "";
+    try {
+      const p = parseCasDocument(doc, "diagnostic.pdf");
+      const holdings = p.holdings.filter((h) => !filter || `${h.amc} ${h.schemeName}`.toLowerCase().includes(filter.toLowerCase()));
+      parsed = `\n\n=== WHAT THE APP READ ===\nInvestor: ${p.investor.title ? p.investor.title + " " : ""}${p.investor.name ?? "(not found)"}\n` + holdings.map((h) =>
+        `${h.amc ?? "-"} | ${h.schemeName} | ISIN ${h.isin} | folio ${h.folio} | units ${h.raw.units} | NAV ${h.raw.nav} | cost ${h.raw.costValue} | value ${h.raw.marketValue} | flags ${h.flags.join(",") || "none"}`
+      ).join("\n") + `\n\nStatus: ${p.integrity.status}\n` + p.integrity.warnings.join("\n");
+    } catch (error) {
+      parsed = `\n\n=== PARSE ERROR ===\n${error.message}`;
+    }
+    const text = shown.join("\n") + parsed;
+    out.textContent = text;
+    return text;
+  }
+
+  document.getElementById("run").addEventListener("click", async () => {
+    const file = document.getElementById("file").files[0];
+    if (!file) return;
+    out.textContent = "Reading…";
+    try {
+      await dump(await file.arrayBuffer(), document.getElementById("password").value, document.getElementById("filter").value.trim());
+    } catch (error) {
+      out.textContent = `Could not read: ${error.message}`;
+    }
+  });
+
+  const params = new URLSearchParams(location.search);
+  const fixture = params.get("file");
+  if (fixture) {
+    let text;
+    try {
+      text = await dump(await (await fetch(`pdf-fixtures/${fixture}`)).arrayBuffer(), params.get("pw") ?? "", params.get("filter") ?? "");
+    } catch (error) {
+      text = `ERROR ${error.code ?? ""}: ${error.message}`;
+    }
+    fetch("/__test-results", { method: "POST", body: text });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+/*
+ * Prosperr Design System — single stylesheet entry point.
+ * Order matters: tokens → base → components → layout → pages → features → print.
+ */
+@import url("./tokens.css");
+@import url("./typography.css");
+@import url("./layout/shell.css");
+@import url("./components/components.css");
+@import url("./components/workflow.css");
+@import url("./components/basket-dialog.css");
+@import url("./components/alert-dialog.css");
+@import url("./layout/site.css");
+@import url("./pages/home.css");
+@import url("./portfolio-analyzer/screens.css");
+@import url("./portfolio-analyzer/workflow-screens.css");
+@import url("./portfolio-analyzer/snapshot.css");
+@import url("./portfolio-analyzer/detailed-report.css");
+@import url("./layout/print.css");

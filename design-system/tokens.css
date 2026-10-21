@@ -1,0 +1,117 @@
+/*
+ * Prosperr design tokens — the single source of truth for every visual value.
+ * Brand palette is derived from the Prosperr logo (confirm hexes against
+ * assets/prosperr-logo.png). Components reference SEMANTIC tokens only.
+ */
+:root {
+  /* Brand palette */
+  --navy: #14346b;
+  --blue: #2b5aa7;
+  --green: #5aa84f;
+  --lime: #aed495;
+  --steel: #6f90c9;
+  --grey: #9aa3b2;
+  --red: #c0453b;
+  --gpos: #3f8a4a;
+  --amber: #b7791f;
+  --navy-deep: #0c1f43;
+  --olive: #6f8f3a;          /* benchmark value labels on lime bars */
+  --frame-inner: #8fa6cf;    /* inner rule of the factsheet double frame */
+  --rule: #e3e8f0;           /* hairlines inside the factsheet */
+  --teal: #1f8a8a;           /* extra accents for colour-coded choices (e.g. model baskets) */
+  --violet: #6b4fbb;
+
+  /* Semantic colors */
+  --color-primary: var(--navy);
+  --color-accent: var(--green);
+  --color-positive: var(--gpos);
+  --color-negative: var(--red);
+  --color-info: var(--blue);
+  --color-warning: var(--amber);
+  --color-muted: var(--grey);
+
+  /* Text — all pass WCAG AA (≥ 4.5:1) on --surface and --surface-alt.
+     Brand --grey/--lime/--green are fills only, never body text. */
+  --text-primary: #18233a;
+  --text-secondary: #46536a;
+  --text-muted: #5d6a80;
+  --text-on-primary: #ffffff;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-alt: #f4f7fc;
+  --surface-tint-navy: #eef2f9;
+  --surface-tint-green: #eef7ec;
+  --surface-tint-red: #fbefee;
+  --surface-tint-blue: #edf3fb;
+  --surface-tint-amber: #fdf6e9;
+  --border: #dfe7f4;
+  --border-strong: #c6d3e8;
+
+  /* Gradients — the brand signature */
+  --grad-divider: linear-gradient(90deg, var(--navy), var(--blue), var(--green));
+  --grad-hero: linear-gradient(135deg, var(--navy) 0%, var(--blue) 60%, var(--green) 130%);
+  --grad-band:
+    radial-gradient(900px 420px at 88% -10%, rgba(90, 168, 79, 0.45), transparent 60%),
+    radial-gradient(700px 380px at 0% 110%, rgba(111, 144, 201, 0.45), transparent 60%),
+    linear-gradient(135deg, #0f2a59 0%, var(--navy) 35%, var(--blue) 100%);
+  --grad-text: linear-gradient(90deg, #ffffff 0%, #d7f0cf 100%);
+
+  /* On-dark (hero band) text — all ≥ 4.5:1 on the navy band */
+  --on-dark-primary: #ffffff;
+  --on-dark-secondary: #d6e2f5;
+  --on-dark-chip: rgba(255, 255, 255, 0.12);
+  --on-dark-chip-border: rgba(255, 255, 255, 0.24);
+  --on-dark-up-bg: rgba(90, 168, 79, 0.25);
+  --on-dark-up-text: #dff5d8;
+  --on-dark-up-border: rgba(174, 212, 149, 0.5);
+  --on-dark-down-bg: rgba(192, 69, 59, 0.28);
+  --on-dark-down-text: #ffe1de;
+  --on-dark-down-border: rgba(255, 180, 172, 0.5);
+  --on-dark-warn-bg: rgba(183, 121, 31, 0.28);
+  --on-dark-warn-border: rgba(255, 214, 153, 0.6);
+  --on-dark-warn-icon: #ffd699;
+  --backdrop: rgba(12, 31, 67, 0.55);
+  --shadow-glow: 0 10px 24px rgba(43, 90, 167, 0.35);
+
+  /* Typography */
+  --font-display: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --fs-cover: 46px;
+  --fs-page-title: 25px;
+  --fs-section-title: 18px;
+  --fs-eyebrow: 11px;
+  --fs-kpi-value: 24px;
+  --fs-kpi-label: 11px;
+  --fs-table-head: 11px;
+  --fs-table-body: 13px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-badge: 10px;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Radius, shadow, focus */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(20, 52, 107, 0.06), 0 4px 16px rgba(20, 52, 107, 0.06);
+  --shadow-raised: 0 8px 28px rgba(20, 52, 107, 0.14);
+  --shadow-float: 0 24px 60px rgba(15, 42, 89, 0.28);
+  --shadow-up: 0 -6px 24px rgba(20, 52, 107, 0.08);
+  --shadow-header: 0 6px 20px rgba(20, 52, 107, 0.08);
+  --page-backdrop: #dfe5ee;
+  --r-xl: 22px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --focus-ring: 0 0 0 3px rgba(43, 90, 167, 0.35);
+
+  --accent-bar: 3px;
+  --content-max: 1440px;    /* wide but readable: content uses most of a laptop screen */
+  --page-gutter: clamp(16px, 3vw, 48px);  /* left/right page margin, scales with the screen */
+}
