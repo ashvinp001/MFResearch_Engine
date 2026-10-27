@@ -13,6 +13,7 @@
     // Opens the REAL workflow at any step (test aid):
     //   ?file=cams.pdf&step=1..4[&demo=1]          detailed flow on a fixture CAS (demo = sample choices)
     //   ?file=cams.pdf&report=snapshot             One-Pager on a fixture CAS
+    //   …&live=1                                   with the latest NAVs and NAV-history analytics (as after an upload)
     //   ?sample=1                                  One-Pager with the Sample Portfolio Review data
     //   ?sample=1&report=detailed&step=4&demo=1    Detailed flow with the sample data + fund analytics
     import * as pdfjs from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
@@ -42,12 +43,14 @@
     } else {
       const file = params.get("file") ?? "cams.pdf";
       portfolio = await analyzeCasPdf({ data: await (await fetch(`pdf-fixtures/${file}`)).arrayBuffer(), fileName: file, pdfjs });
+      // &live=1 → exactly as after an upload: revalue at the latest NAV, fund data from NAV history.
+      if (params.get("live")) portfolio = await app.withLatestNav(portfolio);
       if (params.get("report") === "snapshot") await app.openSnapshot(portfolio);
     }
 
     const detailed = params.get("sample") ? params.get("report") === "detailed" : params.get("report") !== "snapshot";
     if (detailed) {
-      const store = await app.openPortfolio(portfolio, 1, { fundData });
+      const store = await app.openPortfolio(portfolio, 1, fundData ? { fundData } : {});
       if (params.get("demo")) {
         const active = portfolio.holdings.filter((h) => h.status === "active");
         const cycle = ["invest", "hold", "invest", "sell"];

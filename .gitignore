@@ -5,14 +5,15 @@ tests/last-results.txt
 # Real client statements used for local testing — never commit
 tests/pdf-fixtures/local/
 
-# API credentials (e.g. Pulse Labs partner key) — local only, never commit
+# All connection details and keys (Supabase, Pulse Labs) live in .env — never commit.
+# .env.example is the template. (.secrets/ is the old location, kept ignored for safety.)
+.env
 .secrets/
 
 # Local-only instructions for Claude Code — never commit
 CLAUDE.md
 
 # Kept local, not pushed to GitHub (owner's decision)
-database/
 MF_Platform_Specification.md
 
 # Reference report PDFs — contain real client data, local only
@@ -26,3 +27,6 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Claude Code local settings — kept local
+.claude/

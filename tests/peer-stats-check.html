@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peer stats check</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 16px; background: #fff; color: #111; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  Cross-check (Recommendation_Logic.md §8 T20): the peer statistics computed in Python (data-pipeline/peer_stats.py,
+  served by /api/peer-stats) are recomputed here, independently, with the browser engine's own E1 / E2 / E12 / E9
+  functions from the same stored NAVs (/api/nav-history), for whole peer groups. Every figure must agree.
+  Usage: /tests/peer-stats-check.html?groups=Direct|Equity|Large Cap Fund;Regular|Debt|Corporate Bond Fund
+-->
+<pre id="results">running…</pre>
+<script type="module">
+import { anchorNav, navOn, navSeries, periodStart, trailingReturn } from "../calculation-engine/analytics/returns.js";
+import { lastCompletedMonthEnd, monthEnds, riskMetrics } from "../calculation-engine/analytics/risk.js";
+
+const DEFAULT_GROUPS = ["Direct|Equity|Large Cap Fund", "Direct|Equity|Contra Fund", "Regular|Equity|Small Cap Fund",
+  "Regular|Debt|Corporate Bond Fund", "Direct|Hybrid|Arbitrage Fund", "Direct|Debt|Liquid Fund"];
+const groups = new URLSearchParams(location.search).get("groups")?.split(";") ?? DEFAULT_GROUPS;
+const TOL = 0.0006;   // the Python file stores percent figures rounded to 4 decimals
+const lines = [];
+let checks = 0, problems = 0;
+const json = async (url) => { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(`${url} → ${r.status}`); return r.json(); };
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const pct = (x) => (x === null ? null : x * 100);
+function same(label, a, b, tol = TOL) {
+  checks++;
+  const ok = (a === null && b === null) || (a !== null && b !== null && Math.abs(a - b) <= tol);
+  if (!ok) { problems++; lines.push(`  MISMATCH ${label}: python ${b} vs engine ${a}`); }
+}
+
+const lists = await Promise.all(["regular", "direct", "etf"].map((f) => json(`../data/schemes/${f}.json`)));
+const schemes = lists.flatMap((l) => l.schemes.map((s) => ({ ...s, plan: l.plan })));
+
+for (const key of groups) {
+  const [plan, assetClass, category] = key.split("|");
+  const codes = schemes.filter((s) => s.plan === plan && s.assetClass === assetClass && s.category === category && s.active).map((s) => s.schemeCode);
+  const stats = await json(`/api/peer-stats?codes=${codes.join(",")}`);
+  const members = Object.keys(stats.funds).map(Number);
+  const navs = await json(`/api/nav-history?codes=${members.join(",")}`);
+  const ends = monthEnds(lastCompletedMonthEnd(stats.asOf), stats.method.rollingWindows);
+  const fig = {};
+  for (const code of members) {
+    const series = navSeries(navs.series[code]);
+    const T = anchorNav(series);
+    const r3 = trailingReturn(series, { years: 3 }, T);
+    // E12 on month-end NAVs (pairs where both month-ends have a NAV), Sharpe with the 3Y CAGR
+    const me = monthEnds(lastCompletedMonthEnd(T.date), 37).map((d) => navOn(series, d, "previous"));
+    const monthly = me.slice(1).map((b, i) => (b && me[i] ? b.nav / me[i].nav - 1 : null)).filter((x) => x !== null);
+    const risk = r3 === null ? null : riskMetrics({ monthly, cagr3y: r3 });
+    // E12 R5 over the 3Y window, written out separately from the Python loop
+    let dd = null, worst = null;
+    const start = navOn(series, periodStart(T.date, { years: 3 }), "previous");
+    if (start) {
+      const from = series.index.get(start.date), to = series.index.get(T.date);
+      let peak = -Infinity; dd = 0; worst = 0;
+      for (let i = from; i <= to; i++) {
+        peak = Math.max(peak, series.navs[i]);
+        dd = Math.min(dd, series.navs[i] / peak - 1);
+        if (i > from) worst = Math.min(worst, series.navs[i] / series.navs[i - 1] - 1);
+      }
+    }
+    const rolling = new Map();
+    for (const e of ends) {
+      const a = navOn(series, e, "previous");
+      const v = a ? trailingReturn(series, { years: 3 }, a) : null;
+      if (v !== null) rolling.set(e, v);
+    }
+    fig[code] = { r1y: trailingReturn(series, { months: 12 }, T), r3y: r3, r5y: trailingReturn(series, { years: 5 }, T),
+      sharpe3y: risk?.sharpe ?? null, maxDrawdown3y: dd, worstDay3y: worst, rolling, navDate: T.date };
+  }
+  // group medians, ranks (ties share the better rank), E9 quartiles, consistency
+  const g = stats.groups[key];
+  for (const m of ["r1y", "r3y", "r5y", "sharpe3y", "maxDrawdown3y"]) {
+    const vals = members.map((c) => fig[c][m]).filter((x) => x !== null);
+    same(`${key} n.${m}`, vals.length, g.n[m], 0);
+    const med = vals.length >= stats.method.minPeers ? median(vals) : null;
+    same(`${key} median.${m}`, m === "sharpe3y" ? med : pct(med), g.median[m]);
+  }
+  const q = (rank, n) => (rank <= Math.ceil(n * 0.25) ? 1 : rank <= Math.ceil(n * 0.5) ? 2 : rank <= Math.ceil(n * 0.75) ? 3 : 4);
+  const winMedian = new Map(ends.map((e) => {
+    const vals = members.map((c) => fig[c].rolling.get(e)).filter((x) => x !== undefined);
+    return [e, vals.length >= stats.method.minPeers ? median(vals) : null];
+  }));
+  for (const c of members) {
+    const f = fig[c], p = stats.funds[c];
+    same(`${c} navDate`, f.navDate === p.navDate ? 1 : 0, 1, 0);
+    for (const m of ["r1y", "r3y", "r5y", "maxDrawdown3y", "worstDay3y"]) same(`${c} ${m}`, pct(f[m]), p[m]);
+    same(`${c} sharpe3y`, f.sharpe3y, p.sharpe3y);
+    const r3s = members.map((x) => fig[x].r3y).filter((x) => x !== null);
+    if (f.r3y !== null && r3s.length >= stats.method.minPeers) {
+      const rank = 1 + r3s.filter((v) => v > f.r3y).length;
+      same(`${c} rank3y`, rank, p.rank3y, 0);
+      same(`${c} quartile3y`, q(rank, r3s.length), p.quartile3y, 0);
+    } else same(`${c} rank3y`, null, p.rank3y, 0);
+    const shs = members.map((x) => fig[x].sharpe3y).filter((x) => x !== null);
+    if (f.sharpe3y !== null && shs.length >= stats.method.minPeers) same(`${c} sharpeQuartile`, q(1 + shs.filter((v) => v > f.sharpe3y).length, shs.length), p.sharpeQuartile, 0);
+    const wins = ends.filter((e) => f.rolling.has(e) && winMedian.get(e) !== null);
+    const cons = wins.length >= stats.method.minWindows ? (100 * wins.filter((e) => f.rolling.get(e) >= winMedian.get(e)).length) / wins.length : null;
+    same(`${c} consistency`, cons, p.consistency, 0.006);
+  }
+  lines.push(`${key}: ${members.length} funds checked (${codes.length - members.length} active funds without stats: stale NAV)`);
+}
+lines.unshift(`RESULT: ${problems ? "FAIL" : "PASS"} — ${checks} figures compared, ${problems} mismatches`);
+document.getElementById("results").textContent = lines.join("\n");
+document.body.dataset.done = problems ? "fail" : "pass";
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+/* SearchSelect — type-ahead list. Tokens only. */
+.ds-search { position: relative; }
+.ds-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; display: grid; }
+.ds-search-input { padding-left: 34px; }
+.ds-search-list {
+  position: fixed; z-index: 1000;   /* placed by search-select.js, on <body> */
+  margin: 0; padding: 4px; list-style: none;
+  max-height: 320px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  box-shadow: var(--shadow-raised);
+}
+.ds-search-option { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; }
+.ds-search-option:hover, .ds-search-option[aria-selected="true"] { background: var(--surface-tint-blue); }
+.ds-search-label { font-weight: 600; color: var(--text-primary); font-size: var(--fs-body); }
+.ds-search-sub { font-size: var(--fs-small); color: var(--text-muted); }
+.ds-search-group { padding: 8px 10px 4px; font-family: var(--font-display); font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-info); }
+.ds-search-group:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border); }
+.ds-search-empty { padding: 10px; color: var(--text-muted); font-size: var(--fs-small); }

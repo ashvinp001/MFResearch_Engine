@@ -225,8 +225,12 @@ function joinWrappedIsin(rows, i) {
   const text = rows[i].text;
   if (RE.isin.test(text)) return text;
   const next = rows[i + 1]?.text ?? "";
-  if (RE.isinLabelOnly.test(text) && next && RE.isin.test(`${text} ${next}`)) {
-    return `${text} ${next}`;
+  // "… - ISIN:" ends the name line — also when the right-hand "Registrar : CAMS" cell follows it on that line
+  // (it is moved to the end, where the rest of the parser expects it).
+  const registrarCell = text.match(RE.registrarCell)?.[0] ?? "";
+  const head = registrarCell ? text.slice(0, text.length - registrarCell.length) : text;
+  if (RE.isinLabelOnly.test(head) && next && RE.isin.test(`${head} ${next}`)) {
+    return `${head} ${next.trim()}${registrarCell}`;
   }
   const partial = text.match(RE.isinPartial);
   if (partial && next) {

@@ -24,7 +24,7 @@ import { signedPct, signedWhole } from "../reports/snapshot-format.js";
 
 export const STEP = { REVIEW: 1, RECOMMENDATION: 2, BUILDER: 3 };
 
-export function createFinalScreen({ model, portfolio, recommendation, allocation, skipped = false, profile = null, store, onGoTo, onChange }) {
+export function createFinalScreen({ model, portfolio, recommendation, allocation, skipped = false, profile = null, store, onGoTo, onChange, notes = [] }) {
   // Report details are pre-filled by the Prosperr logic (engine buildReportProfile); the advisor can change them.
   const auto = autoDetails(profile);
   const details = store.state.reportDetails ??= { ...auto };
@@ -184,7 +184,8 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
       h("div", { class: "fin-main" },
         coverCard(model, portfolio, () => openPreview()),
         detailsCard(details, onDetailsChange, profile, auto),
-        h("div", { class: "fin-sections" }, sectionCards(model, recommendation).map((card, i) => sectionCard(card, i)))),
+        h("div", { class: "fin-sections" }, sectionCards(model, recommendation).map((card, i) => sectionCard(card, i))),
+        notesCard(notes, profile?.risk?.others ?? [])),
       h("aside", { class: "fin-side" },
         h("div", { class: "fin-card" },
           h("div", { class: "ds-eyebrow" }, "Before you download"),
@@ -198,11 +199,29 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
   return { element, canDownload, download };
 }
 
+// ---------- notes ----------
+/** Why some funds show "—" for every time frame (engine returnNotes); hidden when there is nothing to explain. */
+function notesCard(notes, others = []) {
+  if (!notes.length && !others.length) return null;
+  const item = (name, text) => h("li", {}, h("strong", {}, name), h("span", {}, text));
+  return h("section", { class: "fin-notes" },
+    h("div", { class: "fin-notes-head" }, Icon("info", { size: 18 }),
+      h("div", {}, h("div", { class: "ds-eyebrow" }, "Note"), h("h2", {}, "Before you share the report"))),
+    others.length ? [
+      h("p", { class: "fin-notes-intro" }, `${others.length} fund${others.length > 1 ? "s are" : " is"} counted in the number of funds but not in the Risk profile or Horizon:`),
+      h("ul", {}, others.map((o) => item(o.name, `${o.reason} (${o.sharePct.toFixed(2)}% of value).`))),
+    ] : null,
+    notes.length ? [
+      h("p", { class: "fin-notes-intro" }, `${notes.length} fund${notes.length > 1 ? "s show" : " shows"} “—” for every return period (1Y, 3Y, 5Y). This is expected, not an error:`),
+      h("ul", {}, notes.map((note) => item(note.schemeName ?? note.isin, note.reason))),
+    ] : null);
+}
+
 // ---------- summary cards ----------
 function coverCard(model, portfolio, onPreview) {
   const name = (portfolio.investor.name ?? "Client").toUpperCase();
   return h("section", { class: "fin-cover" },
-    h("button", { type: "button", class: "fin-cover-art", onclick: onPreview, "aria-label": "Preview the full report" },
+    h("button", { type: "button", class: "fin-cover-art ds-paper", onclick: onPreview, "aria-label": "Preview the full report" },
       h("span", { class: "fin-cover-band top" }), h("span", { class: "fin-cover-band bottom" }),
       h("div", { class: "fin-cover-mini" }, Logo({ size: 18 }), h("strong", {}, "Portfolio Review"), h("strong", {}, "& Recommendation")),
       h("span", { class: "fin-cover-hover" }, Icon("search", { size: 18 }), "Preview report")),
@@ -212,7 +231,7 @@ function coverCard(model, portfolio, onPreview) {
       h("p", {}, "Prepared for ", h("strong", {}, name), ` · As on ${todayIso()}`),
       h("button", { type: "button", class: "ds-btn ds-btn-sm fin-preview-btn", onclick: onPreview }, Icon("search", { size: 16 }), "Preview full report"),
       h("div", { class: "fin-cover-facts" },
-        fact("Sections", model.recommended ? "7" : "6"),
+        fact("Sections", model.recommended ? "8" : "7"),   // cover + Sections 01–06 (+ The Way Forward)
         fact("Funds", String(model.fundCount)),
         fact("Current value", formatInr(model.totals.value, { whole: true })),
         fact("Format", "PDF · US Letter"))));
@@ -261,19 +280,24 @@ function sectionCards(model, recommendation) {
       facts: [hasReturns ? "Returns vs benchmark for each fund" : "Awaiting NAV history"],
     },
     {
-      code: "04", title: "Returns & Risk", icon: "shield", status: hasReturns ? "ready" : "partial",
-      text: "Portfolio return vs Nifty 500, 3-year risk measures and the at-a-glance observations.",
+      code: "04", title: "Portfolio Overlap", icon: "layers", status: model.overlap ? "ready" : "pending",
+      text: "How much each pair of funds holds the same stocks (0–100%), with the high-overlap pairs listed.",
+      facts: model.overlap ? [`${model.overlap.funds.length + model.overlap.hidden} funds compared`, `${model.overlap.pairs.length} high-overlap pair${model.overlap.pairs.length === 1 ? "" : "s"}`] : ["Awaiting fund holdings"],
+    },
+    {
+      code: "05", title: "Returns & Risk", icon: "shield", status: hasReturns ? "ready" : "partial",
+      text: "Portfolio return vs its benchmark (each fund's own index, by value), 3-year risk measures and the at-a-glance observations.",
       facts: ["Observations & change-immediately list", hasReturns ? "Returns & risk ratios" : "Returns & risk ratios — awaiting NAV history"],
     },
     {
-      code: "05", title: "Conclusion & Recommendation", icon: "checkCircle", status: "ready",
+      code: "06", title: "Conclusion & Recommendation", icon: "checkCircle", status: "ready",
       text: "The Prosperr view on each holding with commentary.",
       facts: [`Invest ${v.invest.count}`, `Hold ${v.hold.count}`, `Sell ${v.sell.count}`],
     },
     {
       code: "→", title: "The Way Forward", icon: "sparkle", status: rec?.rows.length ? "ready" : "skipped",
       text: "The Prosperr Recommended Portfolio with amounts and why each fund was chosen.",
-      facts: rec ? [`Amount ${formatInr(rec.amount, { whole: true })}`, `${rec.rows.length} funds`, `${rec.totalPct}% allocated`] : ["Skipped — not included in the report"],
+      facts: rec ? [rec.mode === "sip" ? `Monthly SIP ${formatInr(rec.amount, { whole: true })}` : `Lumpsum ${formatInr(rec.amount, { whole: true })}`, `${rec.rows.length} funds`, `${rec.totalPct}% allocated`] : ["Skipped — not included in the report"],
     },
   ];
 }

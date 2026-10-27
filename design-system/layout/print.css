@@ -2,7 +2,9 @@
 #print-root { display: none; }
 
 @media print {
-  html, body { background: var(--surface) !important; margin: 0; }
+  /* Reports print at their exact size, whatever the on-screen fit-to-screen scale. */
+  html { zoom: 1 !important; --fit: 1 !important; }
+  html, body { background: var(--paper) !important; margin: 0; }
   body > *:not(#print-root) { display: none !important; }
   #print-root { display: block; }
   *, *::before, *::after {

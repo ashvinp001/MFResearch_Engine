@@ -94,7 +94,7 @@ function analyzerSpotlight() {
 
 function reportTile(variant, caption, line1, line2) {
   return h("a", { class: `home-report-tile is-${variant}`, href: ROUTES.PORTFOLIO_ANALYZER },
-    h("div", { class: "home-report-art" },
+    h("div", { class: "home-report-art ds-paper" },
       h("span", { class: "band top" }), h("span", { class: "band bottom" }),
       h("div", { class: "home-report-art-text" }, h("strong", {}, line1), h("strong", {}, line2))),
     h("span", { class: "home-report-caption" }, caption));

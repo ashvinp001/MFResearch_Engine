@@ -1,0 +1,3 @@
+# Only dependency of the data scripts (everything else is the Python 3.12 standard library).
+# Needed to write and read the Parquet NAV-history files.
+pyarrow==26.0.0

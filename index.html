@@ -11,6 +11,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="design-system/index.css">
+  <!-- Apply the remembered theme before first paint (see app/shared/theme.js). -->
+  <script>try { if (localStorage.getItem("prosperr-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
+  <!-- Fit to screen: the site is designed for a 1440 px wide window; wider screens scale it up (at most 1.35×) so it
+       fills the screen like any web page instead of a narrow column. Narrower screens use the responsive layout. -->
+  <script>
+    (function () {
+      var DESIGN = 1440, MAX = 1.35, root = document.documentElement;
+      function fit() {
+        var z = Math.min(Math.max(window.innerWidth / DESIGN, 1), MAX);
+        z = Math.round(z * 1000) / 1000;
+        root.style.zoom = z === 1 ? "" : String(z);
+        root.style.setProperty("--fit", String(z));
+      }
+      fit();
+      window.addEventListener("resize", fit);
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>

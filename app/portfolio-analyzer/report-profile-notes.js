@@ -23,11 +23,20 @@ export function autoDetails(profile) {
 function basis(profile, key) {
   if (!profile) return null;
   const unclassified = (list) => `${list.length} fund${list.length > 1 ? "s" : ""} could not be classified (${list.join(", ")}) — please choose.`;
+  // Funds outside the logic tables are "Others": named with their share, and not counted.
+  const othersText = (part) => (part.others?.length
+    ? ` ${part.others.length} fund${part.others.length > 1 ? "s" : ""} in Others (${part.othersPct.toFixed(2)}% of value, not counted): ${part.others.map((o) => `${o.name} (${o.sharePct.toFixed(2)}%) — ${o.reason}`).join("; ")}.`
+    : "");
+  const allOthers = (part) => `All funds are in Others (outside the logic tables) — please choose.${othersText(part)}`;
   if (key === "riskProfile") {
-    return profile.risk.label ? `${profile.risk.equityPct.toFixed(2)}% of the value is in equity.` : unclassified(profile.risk.unclassified);
+    const r = profile.risk;
+    if (r.label) return `${r.equityPct.toFixed(2)}% of the ${r.others?.length ? "counted " : ""}value is in equity.${othersText(r)}`;
+    return r.unclassified.length ? unclassified(r.unclassified) : allOthers(r);
   }
   if (key === "horizon") {
-    return profile.horizon.label ? `Value-weighted ideal holding period: ${profile.horizon.years.toFixed(2)} years.` : unclassified(profile.horizon.unclassified);
+    const r = profile.horizon;
+    if (r.label) return `Value-weighted ideal holding period: ${r.years.toFixed(2)} years.${othersText(r)}`;
+    return r.unclassified.length ? unclassified(r.unclassified) : allOthers(r);
   }
   const d = profile.diversification;
   const largest = d.largestFund && d.largestFund.sharePct >= 50 ? ` Largest fund is ${d.largestFund.sharePct.toFixed(2)}% of the value.` : "";

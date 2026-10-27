@@ -5,8 +5,11 @@
  * state = {
  *   salutation: "" | one of SALUTATIONS — defaults to the title printed on the CAS, if any,
  *   verdicts:   { [holdingKey]: "invest" | "hold" | "sell" },   // pre-filled from the conditions; advisor can change
- *   suggestions: { [holdingKey]: { verdict, ruleId, reason } }, // what the Prosperr conditions suggested
- *   recommended: { amount: number|null, rows: [ { fundId, name, isin, pct } ], basketId?: model-portfolio id applied,
+ *   suggestions: { [holdingKey]: { verdict, status, ruleId, reason, details, notes, … } }, // what the Prosperr logic suggested
+ *                (verdict null + status "review" = not pre-selected; the advisor decides)
+ *   autoLogic: { version, asOf, flags: [{ id, text }] } | null,  // the automatic logic's run (null = not available)
+ *   recommended: { amount: number|null, mode: "lumpsum" | "sip" (one-time amount or monthly SIP; older saves = lumpsum),
+ *                rows: [ { fundId, name, isin, pct } ], basketId?: model-portfolio id applied,
  *                rowsBeforeBasket?: rows to restore when the model is deselected,
  *                skipped?: true when the advisor skipped this step (report leaves out The Way Forward) },
  *   acknowledged: boolean,   // advisor confirmed flagged figures were checked
@@ -52,7 +55,8 @@ export function openClientStore(portfolio) {
       salutation: printedSalutation(portfolio) ?? "",
       verdicts: {},
       suggestions: {},
-      recommended: { amount: null, rows: [emptyRow()] },
+      autoLogic: null,
+      recommended: { amount: null, mode: "lumpsum", rows: [emptyRow()] },
       acknowledged: false,
     },
     save() {

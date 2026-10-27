@@ -3,6 +3,7 @@
  * They draw finished numbers; no business math here.
  *
  *  DonutSvg({ items: [{ value, color }], size, thickness, gap, centerTop, centerBottom })
+ *  GaugeSvg({ items: [{ value, color }], width, thickness, gap, centerTop, centerBottom })   half-donut gauge
  *  GroupedBars({ groups: [{ label, values: [number|null, …] }], series: [{ name, color, labelColor? }], height, slotWidth?, fixedSize? })
  *  StackedBar({ items: [{ label, value, color }] })     100% bar with labels
  *  ChartEmpty({ title, note })                         placeholder until data is connected
@@ -37,6 +38,32 @@ export function DonutSvg({ items, size = 120, thickness = 26, gap = 0, centerTop
     // Centre labels are placed relative to the hole so they fit any donut size.
     centerTop ? h("text", { x: size / 2, y: size / 2 + (centerBottom ? holeRadius * 0.12 : holeRadius * 0.3), "text-anchor": "middle", class: "ig-donut-top" }, centerTop) : null,
     centerBottom ? h("text", { x: size / 2, y: size / 2 + holeRadius * 0.6, "text-anchor": "middle", class: "ig-donut-bottom" }, centerBottom) : null);
+}
+
+/**
+ * Half-donut gauge: segments laid along a semicircle (left → right), with a value and caption in its middle.
+ * items: [{ value, color, title? }] — shares that add up to the whole.
+ */
+export function GaugeSvg({ items, width = 200, thickness = 24, gap = 2, centerTop, centerBottom, ariaLabel }) {
+  const r = (width - thickness) / 2;
+  const cx = width / 2, cy = r + thickness / 2;
+  const height = cy + 6;
+  const length = Math.PI * r;
+  const total = items.reduce((sum, item) => sum + Math.max(item.value, 0), 0);
+  const arcPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  let offset = 0;
+  const arcs = items.map((item) => {
+    const part = total ? (Math.max(item.value, 0) / total) * length : 0;
+    const arc = h("path", { d: arcPath, fill: "none", stroke: item.color, "stroke-width": thickness,
+      "stroke-dasharray": `${Math.max(part - gap, 0.01)} ${length * 2}`, "stroke-dashoffset": -offset }, item.title ? h("title", {}, item.title) : null);
+    offset += part;
+    return arc;
+  });
+  return h("svg", { viewBox: `0 0 ${width} ${height}`, width, height, class: "ig-gauge", role: "img", "aria-label": ariaLabel ?? "Gauge chart" },
+    h("path", { d: arcPath, fill: "none", stroke: "var(--surface-alt)", "stroke-width": thickness }),
+    ...arcs,
+    centerTop ? h("text", { x: cx, y: cy - (centerBottom ? 16 : 4), "text-anchor": "middle", class: "ig-gauge-top" }, centerTop) : null,
+    centerBottom ? h("text", { x: cx, y: cy - 1, "text-anchor": "middle", class: "ig-gauge-bottom" }, centerBottom) : null);
 }
 
 /** Vertical grouped bars with value labels. Negative values sit as a thin bar on the baseline. */

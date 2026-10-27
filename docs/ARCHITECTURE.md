@@ -131,5 +131,5 @@ free data source is connected. The UI already renders `null` as "—".
 |---|---|
 | `market/fund-data-provider.js` | Category, asset class, benchmark, returns, risk, sectors and market cap per fund |
 | `market/nav-provider.js` | NAV history per scheme |
-| `identity/scheme-map.js` | ISIN → scheme code |
+| `identity/scheme-map.js` | ISIN → AMFI scheme code, name, category, plan (from `data/schemes/`) |
 | `analytics/returns.js`, `analytics/risk.js` | Trailing returns, XIRR and risk ratios |

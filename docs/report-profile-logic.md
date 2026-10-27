@@ -116,13 +116,17 @@ Step 3: band
 - **SEBI category:** a CAS does not print it. It is taken from fund data when connected, otherwise
   from the scheme name, but only when the name states the category plainly ("Flexi Cap",
   "Small Cap", "Liquid", "Gilt", "Banking & PSU", "Balanced Advantage", "Nifty 50 Index", "ELSS"…).
-- **Never guessed:** if any fund cannot be classified, Risk profile and Horizon are left blank, the
-  funds are named on screen, and the advisor chooses. Diversification does not need categories and
-  is always filled. Examples that are not classified:
-  - "Kotak Emerging Equity" (mid cap or large & mid? the name does not say)
-  - "Nippon India Growth"
-  - international funds, debt index or target-maturity funds, retirement/children's funds
-  - "Commodities" equity funds
+- **Others (never guessed):** a fund that fits no row of the tables is put in **Others**. It gets no
+  factor and no years, is left out of the Risk and Horizon averages (they use the remaining funds),
+  and is named on screen with its share of the value. Only if every fund is in Others are Risk and
+  Horizon left blank for the advisor to choose. Diversification counts every fund. Examples in Others:
+  - international / overseas funds of funds (e.g. ABSL US Treasury 3-10 Year Bonds ETFs Passive FoF)
+  - debt index or target-maturity funds (e.g. a Nifty G-Sec index fund), retirement/children's funds
+  - "Commodities" equity funds; names that do not state the category when no AMFI category is
+    available (e.g. "Kotak Emerging Equity" — with AMFI data it is "Mid Cap Fund" and is counted)
+- **AMFI category first:** the SEBI category from the AMFI list decides (e.g. Nippon India US Equity
+  Opportunities is "Thematic Fund" → equity). Generic AMFI labels ("Index Funds", "Other ETFs",
+  "FoF Domestic / Overseas") are read together with the fund's name.
 - **Interpretations** (categories the tables do not name explicitly):
   - Silver is treated like Gold (4.0 years; factor 0.30 as "Gold / Silver / Commodity").
   - Large & Mid Cap, Focused, Value, Contra and Dividend Yield funds use the Equity row (factor

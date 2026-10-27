@@ -10,16 +10,17 @@
 
 import { h } from "../../../design-system/components/dom.js";
 import { Card } from "../../../design-system/components/basics.js";
-import { ChartEmpty, DonutSvg, GroupedBars, StackedBar } from "../../../design-system/components/infographics.js";
+import { ChartEmpty, DonutSvg, GroupedBars } from "../../../design-system/components/infographics.js";
 import { BarChart } from "../../../design-system/components/charts.js";
 import { accentAt } from "../../../design-system/tokens.js";
 import { heroBand, kpiRow } from "./review-screen.js";
-import { buildSnapshotSheet, fitSnapshotSheet, SNAPSHOT_COLORS } from "../reports/snapshot-sheet.js";
+import { buildSnapshotSheet, fitSnapshotSheet, portfolioReturnsLine, SNAPSHOT_COLORS } from "../reports/snapshot-sheet.js";
 import { HORIZONS, RISK_PROFILES, RISK_ROWS, suggestedObservations, suggestedStrategy } from "../reports/snapshot-copy.js";
 import { formatSnapshotDate, pct1, pct2, rupees, signedPct, signedWhole, tone } from "../reports/snapshot-format.js";
-import { DASH } from "../../shared/format.js";
+import { DASH, benchmarkPhrase } from "../../shared/format.js";
 import { printElement } from "../../shared/print.js";
 import { autoDetails, autoNote } from "../report-profile-notes.js";
+import { marketCapBlock } from "../reports/market-cap-view.js";
 
 export function createSnapshotScreen({ portfolio, summary, snapshot, profile = null, store, onChange }) {
   // Risk profile and horizon are pre-filled by the Prosperr logic (engine buildReportProfile); editable.
@@ -41,7 +42,7 @@ export function createSnapshotScreen({ portfolio, summary, snapshot, profile = n
   const element = h("main", { class: "app-dashboard" },
     heroBand(portfolio, summary, store, () => onChange?.()),
     h("div", { class: "app-container app-dashboard-body snp-body" },
-      kpiRow(summary),
+      kpiRow(summary, snapshot.xirr),
       section("Holdings", "Holdings performance summary", holdingsCard(snapshot)),
       h("div", { class: "ds-grid" },
         Card({ title: "Composition", eyebrow: "Asset mix (%)", icon: "pie", accent: accentAt(0), className: "ds-col-4 site-reveal", children: compositionView(snapshot) }),
@@ -102,6 +103,7 @@ function compositionView({ composition }) {
     { label: "Equity", value: composition.equity, color: "var(--navy)" },
     { label: "Debt", value: composition.debt, color: "var(--green)" },
     { label: "Gold / Silver", value: composition.goldSilver, color: "var(--lime)" },
+    ...(composition.other > 0 ? [{ label: "Other (REIT / InvIT)", value: composition.other, color: "var(--grey)" }] : []),
   ];
   return h("div", { class: "snp-donut-wrap" }, DonutSvg({ items, size: 150, thickness: 30, gap: 2, centerTop: `${pct1(composition.equity)}%`, centerBottom: "EQUITY" }), legendList(items));
 }
@@ -113,11 +115,7 @@ function sectorsView({ sectors }) {
 
 function marketCapView({ marketCap }) {
   if (!marketCap) return ChartEmpty({ title: "Market-cap split not yet connected", note: "Large, mid and small cap split appears once fund data is connected." });
-  return StackedBar({ items: [
-    { label: "Large", value: marketCap.large, color: "var(--navy)" },
-    { label: "Mid", value: marketCap.mid, color: "var(--blue)" },
-    { label: "Small", value: marketCap.small, color: "var(--green)" },
-  ], ariaLabel: "Market cap split" });
+  return marketCapBlock(marketCap, { size: "screen" });
 }
 
 // ---------- AMC allocation ----------
@@ -139,19 +137,22 @@ function returnsView(snapshot) {
       height: 200, barWidth: 30, ariaLabel: "Trailing returns vs benchmark",
     }),
     h("div", { class: "snp-insight" }, h("strong", {}, "KEY INSIGHT"),
-      h("p", {}, `Across the periods shown the portfolio runs an average edge of ${signedPct(snapshot.averageEdge, 1)} over its ${snapshot.benchmarkName ?? "benchmark"} benchmark.`)));
+      h("p", {}, snapshot.averageEdge === null
+        ? portfolioReturnsLine(snapshot)
+        : `Across the periods shown the portfolio runs an average edge of ${signedPct(snapshot.averageEdge, 1)} over its ${benchmarkPhrase(snapshot.benchmarkName)}.`)));
 }
 
 function riskView({ risk }) {
-  if (!risk) return ChartEmpty({ title: "Risk ratios not yet connected", note: "Alpha, Beta, Standard Deviation and Sharpe Ratio (3-year) appear once NAV history is connected." });
+  if (!risk) return ChartEmpty({ title: "Risk ratios not available", note: "Standard Deviation and Sharpe Ratio (3-year) need 3 years of NAV history for funds holding at least 80% of the portfolio." });
   const fmt = { alpha: (v) => v.toFixed(2), beta: (v) => v.toFixed(2), stdDev: (v) => `${v.toFixed(1)}%`, sharpe: (v) => v.toFixed(2) };
+  const show = (key, v) => (Number.isFinite(v) ? fmt[key](v) : DASH);
   return h("div", { class: "snp-risk-grid" }, RISK_ROWS.map(({ key, label, meaning }) =>
     h("div", { class: "snp-risk-row" },
       h("strong", {}, label),
       h("div", {},
         h("div", { class: "snp-risk-values" },
-          h("span", {}, `Portfolio ${fmt[key](risk[key])}`),
-          key === "alpha" ? null : h("span", { class: "ds-muted" }, `Benchmark ${fmt[key](risk.benchmark[key])}`)),
+          h("span", {}, `Portfolio ${show(key, risk[key])}`),
+          key === "alpha" ? null : h("span", { class: "ds-muted" }, `Benchmark ${show(key, risk.benchmark?.[key])}`)),
         h("span", {}, meaning)))));
 }
 

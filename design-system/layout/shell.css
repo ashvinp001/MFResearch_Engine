@@ -1,7 +1,9 @@
 /* App shell & layout language (Project_Specification_TEMP.md §3). */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: var(--surface-alt); min-height: 100vh; }
+body { background: var(--surface-alt); min-height: calc(100 * var(--vh)); }
+/* Report paper keeps the light palette in every theme (tokens.css); re-resolve inherited text colour. */
+.ds-paper { color: var(--text-primary); }
 
 button, input { font: inherit; }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -58,7 +60,7 @@ button, input { font: inherit; }
 .ds-btn:hover:not(:disabled) { background: var(--surface-tint-navy); }
 .ds-btn-primary { background: var(--grad-hero); border-color: transparent; color: var(--text-on-primary); }
 .ds-btn-primary:hover:not(:disabled) { background: var(--grad-hero); box-shadow: var(--shadow-raised); transform: translateY(-1px); }
-.ds-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-btn:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
 .ds-btn-sm { padding: 6px 12px; font-size: var(--fs-small); }
 
 .ds-input {

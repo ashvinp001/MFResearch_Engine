@@ -17,8 +17,10 @@ import { h } from "../../../design-system/components/dom.js";
 import { Logo } from "../../../design-system/components/basics.js";
 import { DonutSvg, GroupedBars } from "../../../design-system/components/infographics.js";
 import { RISK_ROWS, sourceNote } from "./snapshot-copy.js";
-import { DASH } from "../../shared/format.js";
+import { DASH, benchmarkPhrase } from "../../shared/format.js";
+import { trueSizeZoom } from "../../shared/print.js";
 import { formatSnapshotDate, pct1, pct2, rupees, signedPct, signedWhole, tone } from "./snapshot-format.js";
+import { marketCapBlock } from "./market-cap-view.js";
 
 /** Series colours in the order the sample uses them. */
 export const SNAPSHOT_COLORS = ["var(--navy)", "var(--blue)", "var(--green)", "var(--lime)", "var(--steel)", "var(--grey)"];
@@ -28,7 +30,8 @@ const MIN_TABLE_ZOOM = 0.6;
 const MIN_PAGE_ZOOM = 0.7;
 
 export async function fitSnapshotSheet(sheet) {
-  const stage = h("div", { "aria-hidden": "true", style: { position: "fixed", left: "-10000px", top: "0" } }, sheet);
+  // Measured at true size (the on-screen fit-to-screen scale cancelled), so the fit matches the printed page.
+  const stage = h("div", { "aria-hidden": "true", style: { position: "fixed", left: "-10000px", top: "0", zoom: trueSizeZoom() } }, sheet);
   document.body.append(stage);
   await document.fonts?.ready;
   const frame = sheet.querySelector(".snap-frame");
@@ -63,7 +66,7 @@ export function buildSnapshotSheet({ portfolio, snapshot, settings }) {
   ].filter(Boolean);
   const meta = metaParts.flatMap((part, i) => (i ? [h("span", { class: "snap-sep" }, "·"), part] : [part]));
 
-  return h("section", { class: "snap-sheet" },
+  return h("section", { class: "snap-sheet ds-paper" },
     h("div", { class: "snap-frame" },
       h("header", { class: "snap-header" },
         h("div", {},
@@ -140,6 +143,7 @@ function compositionList({ composition }) {
     { label: "Equity", value: pct1(composition?.equity), swatch: "var(--navy)" },
     { label: "Debt", value: pct1(composition?.debt), swatch: "var(--green)" },
     { label: "Gold / Silver", value: pct1(composition?.goldSilver), swatch: "var(--lime)" },
+    ...(composition?.other > 0 ? [{ label: "Other (REIT / InvIT)", value: pct1(composition.other), swatch: "var(--grey)" }] : []),
   ]);
 }
 
@@ -149,13 +153,8 @@ function sectorList({ sectors }) {
 }
 
 function marketCapList({ marketCap }) {
-  const total = marketCap ? marketCap.large + marketCap.mid + marketCap.small : null;
-  return listRows([
-    { label: "Large Cap", value: pct1(marketCap?.large) },
-    { label: "Mid Cap", value: pct1(marketCap?.mid) },
-    { label: "Small Cap", value: pct1(marketCap?.small) },
-    { label: "Total", value: pct1(total), total: true },
-  ]);
+  if (!marketCap) return h("p", { class: "snap-pending" }, "Market-cap split appears once fund data is connected.");
+  return marketCapBlock(marketCap, { size: "print" });
 }
 
 function returnsBox(snapshot) {
@@ -175,10 +174,10 @@ function returnsBox(snapshot) {
   });
 
   const insight = snapshot.averageEdge === null
-    ? h("p", {}, "Trailing returns appear here once NAV history is connected.")
+    ? h("p", {}, portfolioReturnsLine(snapshot))
     : h("p", {}, "Across the periods shown the portfolio runs an average edge of ",
         h("strong", { class: tone(snapshot.averageEdge) }, `${signedPct(snapshot.averageEdge, 1)}`),
-        ` over its ${snapshot.benchmarkName ?? "benchmark"} benchmark.`);
+        ` over its ${benchmarkPhrase(snapshot.benchmarkName)}.`);
 
   return h("div", { class: "snap-returns" },
     h("div", { class: "snap-returns-chart" },
@@ -187,6 +186,14 @@ function returnsBox(snapshot) {
         h("span", {}, h("i", { style: { background: "var(--lime)" } }), "Benchmark")),
       chart),
     h("div", { class: "snap-insight" }, h("div", { class: "snap-insight-title" }, "KEY INSIGHT"), insight));
+}
+
+/** "Portfolio returns: 1Y +12.3% · 3Y +15.1% p.a. · 5Y —. Benchmark comparison appears once index data is connected." */
+export function portfolioReturnsLine(snapshot) {
+  const rows = snapshot.trailingReturns ?? [];
+  if (!rows.some((r) => Number.isFinite(r.portfolio))) return "Trailing returns appear here once NAV history is available for the funds.";
+  const parts = rows.map((r) => `${r.period} ${Number.isFinite(r.portfolio) ? `${signedPct(r.portfolio, 1)}${r.period === "1Y" ? "" : " p.a."}` : "—"}`);
+  return `Portfolio returns: ${parts.join(" · ")}. Benchmark comparison appears once index data is connected.`;
 }
 
 function riskTable({ risk }) {
@@ -205,8 +212,8 @@ function riskTable({ risk }) {
   return h("table", { class: "snap-risk" },
     h("thead", {}, h("tr", {}, h("th", { class: "snap-th-fund" }, "RATIO"), h("th", { class: "num" }, "PORTFOLIO"), h("th", { class: "num" }, "BMK"), h("th", { class: "meaning" }, "WHAT IT MEANS"))),
     h("tbody", {}, RISK_ROWS.map(({ key, label, meaning }) => {
-      const value = risk?.[key];
-      const bench = key === "alpha" ? undefined : risk?.benchmark?.[key];
+      const value = Number.isFinite(risk?.[key]) ? risk[key] : undefined;
+      const bench = key === "alpha" || !Number.isFinite(risk?.benchmark?.[key]) ? undefined : risk.benchmark[key];
       return h("tr", {},
         h("td", { class: "snap-fund" }, label),
         h("td", { class: `num strong ${value === undefined ? "" : portfolioTone[key](value, bench)}` }, value === undefined ? DASH : fmt[key](value)),

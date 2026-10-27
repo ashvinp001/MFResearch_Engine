@@ -1,8 +1,8 @@
 /* BasketDialog — colourful basket cards that lift on hover. Tokens only. */
 
 .bk-dialog {
-  width: min(1240px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  width: min(1240px, calc(100 * var(--vw) - 32px));
+  max-height: calc(100 * var(--vh) - 32px);
   padding: 0;
   border: none;
   border-radius: var(--r-xl);

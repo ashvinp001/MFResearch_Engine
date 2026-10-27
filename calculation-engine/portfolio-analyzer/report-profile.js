@@ -6,16 +6,17 @@
  * Input:  a validated portfolio and fundData (Phase 2, may be null).
  * Output: buildReportProfile → {
  *   diversification: { status, numFunds, portfolioValue, range: { min, max }, largestFund: { name, sharePct } },
- *   risk:    { label | null, equityPct | null, unclassified: [fundName] },
- *   horizon: { label | null, years | null,     unclassified: [fundName] },
+ *   risk:    { label | null, equityPct | null, unclassified: [fundName], others: [{ name, sharePct, reason }], othersPct },
+ *   horizon: { label | null, years | null,     unclassified: [fundName], others: [{ name, sharePct, reason }], othersPct },
  *   funds:   [ { name, isin, value, category | null, source | null } ]
  * }
  *
  * Exactness: values are the printed CAS current values in integer paise; factors and years
  * are held as integers (×100) and bands are compared with BigInt arithmetic, so a portfolio
  * sitting exactly on a boundary (e.g. 80.00% equity) always lands in the right band.
- * Risk and Horizon need every fund's SEBI category: if any fund cannot be classified
- * (see fund-category.js) the label is null and those funds are listed — never guessed.
+ * Risk and Horizon use the funds that fit the logic tables. Funds that fit none (international FoFs,
+ * debt index / target-maturity, solution-oriented …) are "Others": they get NO factor and NO years
+ * (never guessed), are left out of both averages, and are listed with their share of the value.
  * Funds: active holdings (zero closing units excluded); the same ISIN held in several
  * folios counts as ONE fund, with its values added together.
  */
@@ -180,13 +181,18 @@ export function buildReportProfile(portfolio, fundData = null) {
   };
 
   const unclassified = list.filter((fund) => !fund.category).map((fund) => fund.name);
-  const complete = list.length > 0 && unclassified.length === 0;
-  const riskResult = complete ? weightedBand(list, EQUITY_FACTOR_X100, RISK_BANDS, 1) : { label: null, value: null };
-  const horizonResult = complete ? weightedBand(list, YEARS_X100, HORIZON_BANDS, 100) : { label: null, value: null };
+  const othersList = list.filter((fund) => fund.category === C.OTHERS);
+  const counted = list.filter((fund) => fund.category && fund.category !== C.OTHERS);
+  const share = (paise) => (totalPaise > 0n ? Number((paise * 10000n) / totalPaise) / 100 : 0);
+  const others = othersList.map((fund) => ({ name: fund.name, sharePct: share(fund.paise), reason: fund.reason }));
+  const othersPct = share(othersList.reduce((sum, fund) => sum + fund.paise, 0n));
+  const complete = counted.length > 0 && unclassified.length === 0;
+  const riskResult = complete ? weightedBand(counted, EQUITY_FACTOR_X100, RISK_BANDS, 1) : { label: null, value: null };
+  const horizonResult = complete ? weightedBand(counted, YEARS_X100, HORIZON_BANDS, 100) : { label: null, value: null };
   return {
     diversification,
-    risk: { label: riskResult.label, equityPct: riskResult.value, unclassified },
-    horizon: { label: horizonResult.label, years: horizonResult.value, unclassified },
+    risk: { label: riskResult.label, equityPct: riskResult.value, unclassified, others, othersPct },
+    horizon: { label: horizonResult.label, years: horizonResult.value, unclassified, others, othersPct },
     funds: list.map((fund) => ({ name: fund.name, isin: fund.isin, value: Number(fund.paise) / 100, category: fund.category, source: fund.source })),
   };
 }

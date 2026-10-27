@@ -199,3 +199,26 @@
 @media print {
   .snap-sheet { page: snapshot; box-shadow: none; margin: 0; break-after: auto; }
 }
+
+/* Market cap (One-Pager, screen and print): half-donut gauge + tilt + one tile per size (market-cap-view.js) */
+.mc-block { display: grid; gap: 14px; }
+.mc-gauge { display: grid; justify-items: center; gap: 8px; }
+.ig-gauge-top { font-family: var(--font-display); font-weight: 800; font-size: 24px; fill: var(--navy); }
+.ig-gauge-bottom { font-family: var(--font-display); font-weight: 700; font-size: 9px; letter-spacing: 0.12em; fill: var(--text-muted); }
+.mc-tilt { padding: 3px 12px; border-radius: 999px; background: var(--surface-tint-navy); color: var(--color-primary); font-family: var(--font-display); font-size: 12px; font-weight: 700; }
+.mc-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mc-tile { display: grid; gap: 2px; padding: 10px 10px 9px; border-radius: 10px; background: var(--surface-alt); border-top: 3px solid var(--mc); text-align: center; }
+.mc-tile strong { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--mc); }
+.mc-tile span { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.mc-tile small { font-size: 10.5px; color: var(--text-muted); line-height: 1.3; }
+/* Printed one-pager: the same block, sized for its narrow column. */
+.mc-block.is-print { gap: 7px; }
+.mc-block.is-print .mc-gauge { gap: 4px; }
+.mc-block.is-print .ig-gauge-top { font-size: 17px; }
+.mc-block.is-print .ig-gauge-bottom { font-size: 6.5px; }
+.mc-block.is-print .mc-tilt { padding: 2px 8px; font-size: 8px; }
+.mc-block.is-print .mc-tiles { gap: 4px; }
+.mc-block.is-print .mc-tile { padding: 5px 3px 4px; border-radius: 5px; border-top-width: 2px; }
+.mc-block.is-print .mc-tile strong { font-size: 11px; }
+.mc-block.is-print .mc-tile span { font-size: 7.5px; }
+.mc-block.is-print .mc-tile small { font-size: 6.2px; }

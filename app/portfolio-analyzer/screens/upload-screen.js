@@ -185,7 +185,7 @@ export function createUploadScreen({ onAnalyze, onFileSelected }) {
       h("h2", {}, "Two reports to choose from after you analyse")),
     h("div", { class: "app-reports" }, REPORTS.map((report, i) =>
       h("article", { class: `app-report is-${report.variant} site-reveal`, style: { "--accent": report.accent, "--i": i } },
-        h("div", { class: "home-report-art app-report-art", "aria-hidden": "true" },
+        h("div", { class: "home-report-art app-report-art ds-paper", "aria-hidden": "true" },
           h("span", { class: "band top" }), h("span", { class: "band bottom" }),
           h("div", { class: "home-report-art-text" }, h("strong", {}, report.cover[0]), h("strong", {}, report.cover[1]))),
         h("div", {},

@@ -2,8 +2,7 @@
 
 /* Logo */
 .ds-logo { display: inline-flex; align-items: center; height: var(--logo-size); }
-.ds-logo-img { height: var(--logo-size); width: auto; display: block; }
-.ds-logo-wordmark {
+.ds-logo-img { height: var(--logo-size); width: auto; display: block; }.ds-logo-wordmark {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: calc(var(--logo-size) * 0.7);
@@ -128,7 +127,7 @@
 .ds-table { width: 100%; border-collapse: collapse; font-size: var(--fs-table-body); }
 .ds-table caption { text-align: left; padding: var(--sp-2) var(--sp-3); color: var(--text-muted); font-size: var(--fs-small); }
 .ds-table thead th {
-  background: var(--color-primary);
+  background: var(--table-head-bg);
   color: var(--text-on-primary);
   font-family: var(--font-display);
   font-size: var(--fs-table-head);

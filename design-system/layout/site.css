@@ -24,7 +24,9 @@
   align-items: center;
   gap: var(--sp-4);
 }
-.site-brand { display: inline-flex; text-decoration: none; }
+.site-brand { display: inline-flex; text-decoration: none; border-radius: var(--r-md); }
+/* Dark theme: the original logo on a white plate, so its colours read exactly as on paper. */
+[data-theme="dark"] .site-brand { background: var(--paper); padding: 5px 12px; box-shadow: 0 0 0 1px var(--border-strong); }
 .site-header-divider { width: 1px; height: 32px; background: var(--border-strong); }
 .site-nav { display: flex; gap: 4px; justify-self: start; }
 .site-nav-link {
@@ -71,6 +73,18 @@
 }
 .site-header-actions { display: flex; align-items: center; justify-self: end; gap: var(--sp-2); }
 .site-cta { text-decoration: none; }
+.site-theme-toggle {
+  width: 36px; height: 36px;
+  display: grid; place-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.site-theme-toggle:hover { color: var(--color-primary); background: var(--surface-tint-navy); border-color: var(--navy); }
+.site-theme-toggle[aria-pressed="true"] { color: var(--amber); }
 .site-menu-toggle { display: none; width: 40px; height: 40px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; padding: 10px 9px; }
 .site-menu-toggle span { display: block; height: 2px; background: var(--color-primary); border-radius: 2px; }
 .site-menu-toggle span + span { margin-top: 5px; }
@@ -154,10 +168,10 @@
 /* ---------- Footer ---------- */
 /* Full-height column: the footer sits at the bottom even on short pages. Content
    keeps its natural height (never stretched), so zooming out shows a normal page. */
-.site { display: flex; flex-direction: column; min-height: 100vh; }
+.site { display: flex; flex-direction: column; min-height: calc(100 * var(--vh)); }
 .site-view { flex: 1 0 auto; }
 
-.site-footer { background: var(--navy-deep); color: var(--on-dark-secondary); margin-top: var(--sp-6); }
+.site-footer { background: var(--navy-deep); color: var(--on-dark-secondary); margin-top: var(--sp-6); border-top: 1px solid var(--border); }
 .site-footer-inner {
   max-width: var(--content-max);
   margin: 0 auto;

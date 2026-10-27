@@ -20,13 +20,16 @@ import { SALUTATIONS } from "../client-store.js";
 
 const TOP_HOLDINGS = 6;
 
-export function createReviewScreen({ portfolio, summary, holdingGain, store, onChange }) {
+export function createReviewScreen({ portfolio, summary, holdingGain, store, onChange, fundData = null }) {
   const dialog = createTransactionDialog();
   let showRedeemed = false;
   const holdingsSlot = h("div");
+  // One NAV date for the section (the most common among active funds); a row shows its own date only when it differs.
+  const commonNavDate = mostCommon(portfolio.holdings.filter((holding) => holding.status === "active").map((holding) => holding.navDate).filter(Boolean));
+  const navDateNote = commonNavDate ? h("span", { class: "app-nav-date" }, Icon("calendar", { size: 14 }), `NAV as on ${formatDate(commonNavDate)}`) : null;
 
   const renderHoldings = () => holdingsSlot.replaceChildren(
-    holdingsTable(portfolio, summary, holdingGain, showRedeemed, (holding) => dialog.open(holding))
+    holdingsTable(portfolio, summary, holdingGain, showRedeemed, (holding) => dialog.open(holding), fundData, commonNavDate)
   );
   renderHoldings();
 
@@ -39,18 +42,26 @@ export function createReviewScreen({ portfolio, summary, holdingGain, store, onC
   return h("main", { class: "app-dashboard" },
     heroBand(portfolio, summary, store, onChange),
     h("div", { class: "app-container app-dashboard-body" },
-      kpiRow(summary),
+      kpiRow(summary, fundData?.xirr ?? null),
       reviewNotice(portfolio),
       chartsRow(portfolio, summary),
       h("section", { class: "app-section" },
-        sectionHead("Holdings", "Every fund in the client's statement", redeemedToggle),
+        sectionHead("Holdings", "Every fund in the client's statement", h("div", { class: "app-section-aside" }, navDateNote, redeemedToggle)),
         holdingsSlot,
-        h("p", { class: "app-note" }, Icon("info", { size: 14 }), " Units and NAV are shown exactly as printed on the statement. Click any fund to see its transactions.")
+        h("p", { class: "app-note" }, Icon("info", { size: 14 }), portfolio.valuation?.asOf
+          ? " Units are as printed on the statement; NAV and current value use each fund's latest NAV. Click any fund to see its transactions."
+          : " Units and NAV are shown exactly as printed on the statement. Click any fund to see its transactions.")
       ),
       checksSection(portfolio)
     ),
     dialog.element
   );
+}
+
+function mostCommon(values) {
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || (b[0] > a[0] ? 1 : -1))[0]?.[0] ?? null;
 }
 
 function sectionHead(eyebrow, title, aside) {
@@ -78,7 +89,8 @@ function salutationSelect(store, onChange) {
 export function heroBand(portfolio, summary, store, onChange) {
   const { investor, source, integrity } = portfolio;
   const name = titleCase(investor.name);
-  const asOf = formatDate(source.statementAsOf ?? source.statementPeriod.to);
+  const statementDate = formatDate(source.statementAsOf ?? source.statementPeriod.to);
+  const valuation = portfolio.valuation;
   const gainUp = summary.unrealisedGain === null || summary.unrealisedGain >= 0;
   const verified = integrity.status === "ok";
 
@@ -88,8 +100,10 @@ export function heroBand(portfolio, summary, store, onChange) {
         h("div", { class: "site-reveal" },
           h("div", { class: "ds-eyebrow" }, "Client Name"),
           h("h1", { class: "app-dash-greeting" }, salutationSelect(store, onChange), h("span", {}, name ?? "Client")),
-          h("p", { class: "app-dash-sub" }, `Mutual fund holdings as on ${asOf}.`)),
+          h("p", { class: "app-dash-sub" }, valuationLine(valuation, statementDate))),
         h("div", { class: "app-dash-hero-actions site-reveal", style: { "--i": 1 } },
+          h("span", { class: "site-chip app-chip-date", title: valuation?.asOf ? "Values at the latest NAV stored for each fund" : "Values as printed on the statement" },
+            Icon("calendar", { size: 16 }), `Data as on ${valuation?.asOf ? formatDate(valuation.asOf) : statementDate}`),
           h("span", { class: `site-chip ${verified ? "" : "app-chip-review"}` },
             Icon(verified ? "shield" : "alert", { size: 16 }), verified ? "Verified with the statement" : "Some figures need review"),
           h("span", { class: "site-chip" }, Icon("file", { size: 16 }), FORMAT_LABEL[source.format]))
@@ -113,11 +127,22 @@ export function heroBand(portfolio, summary, store, onChange) {
   );
 }
 
+/** "Current value as on 21 Oct 2026 (latest NAV) · statement as on 05 Feb 2026." — plus any funds left at statement value. */
+function valuationLine(valuation, statementDate) {
+  if (!valuation?.asOf) {
+    return valuation?.unavailable
+      ? `Mutual fund holdings as on ${statementDate} (statement values — latest NAVs could not be loaded).`
+      : `Mutual fund holdings as on ${statementDate}.`;
+  }
+  const kept = valuation.statement ? ` ${valuation.statement} fund${valuation.statement > 1 ? "s" : ""} at statement value.` : "";
+  return `Current value as on ${formatDate(valuation.asOf)} (latest NAV) · statement as on ${statementDate}.${kept}`;
+}
+
 function stat(label, value) {
   return h("div", {}, h("dt", {}, label), h("dd", { class: "ds-num" }, value));
 }
 
-export function kpiRow(summary) {
+export function kpiRow(summary, xirr = null) {
   const gainTone = summary.unrealisedGain === null ? undefined : summary.unrealisedGain >= 0 ? "positive" : "negative";
   const costNote = summary.holdingsWithoutCost
     ? `Excludes ${summary.holdingsWithoutCost} fund(s) with no cost on the statement`
@@ -128,7 +153,7 @@ export function kpiRow(summary) {
       KpiCard({ label: "Amount invested", value: formatInr(summary.totalCostValue, { whole: true }), sub: costNote, accent: accentAt(1), icon: "invested" }),
       KpiCard({ label: "Overall gain", value: formatSignedInr(summary.unrealisedGain, { whole: true }), sub: summary.unrealisedGainPct === null ? DASH : `${formatSignedPct(summary.unrealisedGainPct)} on amount invested`, tone: gainTone, accent: accentAt(2), icon: "trend" }),
       KpiCard({ label: "Funds held", value: String(summary.activeCount), sub: summary.amcCount ? `Across ${summary.amcCount} AMC${summary.amcCount > 1 ? "s" : ""}` : "Mutual fund schemes", accent: accentAt(3), icon: "layers" }),
-      KpiCard({ label: "Annual return (XIRR)", value: DASH, sub: "Coming soon", accent: accentAt(4), icon: "sparkle" }),
+      KpiCard({ label: "Annual return (XIRR)", value: Number.isFinite(xirr) ? formatSignedPct(xirr / 100) : DASH, sub: Number.isFinite(xirr) ? "From every purchase and redemption to today" : "Needs the full transaction history", tone: Number.isFinite(xirr) ? (xirr >= 0 ? "positive" : "negative") : undefined, accent: accentAt(4), icon: "sparkle" }),
     ].map((card, i) => { card.classList.add("site-reveal"); card.style.setProperty("--i", i); return card; })
   );
 }
@@ -188,7 +213,7 @@ function chartsRow(portfolio, summary) {
   );
 }
 
-function holdingsTable(portfolio, summary, holdingGain, showRedeemed, onSelect) {
+function holdingsTable(portfolio, summary, holdingGain, showRedeemed, onSelect, fundData = null, commonNavDate = null) {
   const visible = portfolio.holdings.filter((holding) => showRedeemed || holding.status === "active");
   const byAmc = new Map();
   for (const holding of visible) {
@@ -208,16 +233,31 @@ function holdingsTable(portfolio, summary, holdingGain, showRedeemed, onSelect) 
   const columns = [
     { key: "fund", label: "Fund", render: (holding) => fundCell(holding, accentByAmc.get(holding.amc ?? "Mutual funds")) },
     { key: "units", label: "Units", align: "right", render: (holding) => asPrinted(holding.raw.units) },
-    { key: "nav", label: "NAV (₹)", align: "right", render: (holding) => h("div", {}, asPrinted(holding.raw.nav), h("div", { class: "app-cell-sub" }, formatDate(holding.navDate))) },
+    { key: "nav", label: "NAV (₹)", align: "right", render: (holding) => h("div", {}, asPrinted(holding.raw.nav), holding.navDate && holding.navDate !== commonNavDate ? h("div", { class: "app-cell-sub" }, formatDate(holding.navDate)) : null) },
     { key: "cost", label: "Invested value (₹)", align: "right", render: (holding) => formatAmount(holding.costValue) },
     { key: "value", label: "Current value (₹)", align: "right", render: (holding) => valueCell(holding, summary.shareOf(holding)) },
     { key: "gain", label: "Gain / Loss (₹)", align: "right", render: (holding) => gainCell(holdingGain(holding)) },
-    { key: "r1y", label: "1Y return", align: "right", render: () => h("span", { class: "app-cell-sub" }, "Soon") },
+    { key: "r1y", label: "1Y return", align: "right", render: (holding) => oneYearCell(fundData?.funds?.[holding.isin]) },
   ];
 
   if (!groups.length) return Callout({ tone: "info", body: "There are no funds to show." });
   return DataTable({ columns, groups, onRowClick: onSelect, rowClass: (holding) => (holding.flags.length ? "app-row-flagged" : "") });
 }
+
+/** 1-year return from NAV history (E2); for a fund under a year old, its return since launch; else "—". */
+function oneYearCell(info) {
+  const signed = (pct) => h("span", { class: `ds-num app-r1y ${pct >= 0 ? "app-positive" : "app-negative"}` }, formatSignedPct(pct / 100));
+  const r1y = info?.returns?.r1y;
+  if (Number.isFinite(r1y)) return signed(r1y);
+  const since = info?.sinceLaunch;
+  if (since && Number.isFinite(since.pct)) {
+    return h("div", { title: `Under a year of NAV history: return since the first NAV on ${formatDate(since.from)} (not annualised)` },
+      signed(since.pct), h("div", { class: "app-cell-sub" }, `since ${formatMonthYear(since.from)}`));
+  }
+  return h("span", { class: "app-cell-sub", title: "No NAV history for this fund" }, DASH);
+}
+
+const formatMonthYear = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 
 function fundCell(holding, accent) {
   return h("div", { class: "app-fund" },

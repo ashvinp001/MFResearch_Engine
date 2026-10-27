@@ -64,7 +64,7 @@ export function formatDate(iso) {
   return `${String(day).padStart(2, "0")} ${MONTHS[month - 1]} ${year}`;
 }
 
-/** "PRIYA KAPOOR" → "Priya Kapoor" for display. */
+/** "ASHA MEHTA" → "Asha Mehta" for display. */
 export function titleCase(fullName) {
   const words = String(fullName ?? "").trim().split(/\s+/).filter(Boolean);
   return words.length ? words.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ") : null;
@@ -73,6 +73,15 @@ export function titleCase(fullName) {
 /** Initials for an avatar: "HDFC Mutual Fund" → "HM". */
 export function initials(text) {
   return String(text ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0].toUpperCase()).join("") || "MF";
+}
+
+/**
+ * The portfolio benchmark in a sentence: "NIFTY 500 Index benchmark", or for the blend of the funds' own
+ * indices (engine BLENDED_BENCHMARK) "blended benchmark (each fund's own index, by value)".
+ */
+export function benchmarkPhrase(name) {
+  if (!name) return "benchmark";
+  return name === "Blended Benchmark" ? "blended benchmark (each fund's own index, by value)" : `${name} benchmark`;
 }
 
 /** Printed strings (units, NAV) are shown exactly as the statement printed them. */

@@ -1,9 +1,11 @@
 /**
  * Website shell — the header and footer shared by every Prosperr page.
  *
- *  SiteHeader({ links: [{ label, href, icon?, accent?, badge? }], cta?: { label, href } }) → { element, setActive(href) }
+ *  SiteHeader({ links: [{ label, href, icon?, accent?, badge? }], cta?: { label, href },
+ *               theme?: { value: "light" | "dark", onChange(theme) } }) → { element, setActive(href) }
  *      Brand strip on top; logo and colour-coded navigation tabs on the left (accent =
- *      a palette token name such as "green"); optional call-to-action right; menu on mobile.
+ *      a palette token name such as "green"); optional theme switch and call-to-action
+ *      right; menu on mobile.
  *  SiteFooter({ name, tagline, columns: [{ title, links: [{ label, href }] }], legal }) → element
  * Content (labels, URLs) comes from the app; this file only renders it.
  */
@@ -12,7 +14,27 @@ import { h } from "./dom.js";
 import { Logo } from "./basics.js";
 import { Icon } from "./icons.js";
 
-export function SiteHeader({ links, cta }) {
+/** Light / dark switch: an icon button showing the theme it switches TO. */
+function ThemeToggle({ value, onChange }) {
+  const button = h("button", { type: "button", class: "site-theme-toggle" });
+  const render = (theme) => {
+    const dark = theme === "dark";
+    button.setAttribute("aria-pressed", String(dark));
+    button.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+    button.title = dark ? "Light theme" : "Dark theme";
+    button.replaceChildren(Icon(dark ? "sun" : "moon", { size: 17, strokeWidth: 2 }));
+  };
+  let current = value;
+  render(current);
+  button.addEventListener("click", () => {
+    current = current === "dark" ? "light" : "dark";
+    onChange(current);
+    render(current);
+  });
+  return button;
+}
+
+export function SiteHeader({ links, cta, theme }) {
   const anchors = links.map((link) => h("a", {
     href: link.href,
     class: "site-nav-link",
@@ -31,6 +53,7 @@ export function SiteHeader({ links, cta }) {
       h("span", { class: "site-header-divider", "aria-hidden": "true" }),
       nav,
       h("div", { class: "site-header-actions" },
+        theme ? ThemeToggle(theme) : null,
         cta ? h("a", { href: cta.href, class: "ds-btn ds-btn-primary ds-btn-sm site-cta" }, cta.label, Icon("arrowRight", { size: 16 })) : null,
         toggle)));
 

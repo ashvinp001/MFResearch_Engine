@@ -42,26 +42,70 @@
 .app-page-title { font-size: clamp(28px, 3.6vw, 38px); font-weight: 800; margin-top: 6px; }
 .app-page-text { margin: 8px 0 0; max-width: 760px; color: var(--on-dark-secondary); font-size: 16px; }
 .app-step-body { margin-top: -48px; position: relative; z-index: 2; padding-bottom: 48px; }
-.rec-side-stack { display: grid; gap: var(--sp-4); align-content: start; position: sticky; top: 140px; }
-
+/* Side column runs the full height of the fund list, so its pinned top part (options + summary) stays in view
+   until the list ends; the cards below it scroll normally and pass underneath. */
+.rec-side-stack { display: grid; gap: var(--sp-4); align-content: start; align-self: stretch; }
+/* Wide screens: the side panel starts higher, so the two option tabs sit inside the green-blue page banner (owner's layout) and more of the panel fits in place. */
+@media (min-width: 1081px) { .rec-layout > .rec-side-stack { margin-top: -139px; } }
+/* Top of the side column: list options, summary and Suggestion Box, in the page flow (they scroll with the page). */
+.rec-side-pin { display: grid; gap: var(--sp-4); }
 /* ---------- Recommendation ---------- */
 .rec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--sp-5); align-items: start; }
 .rec-panel { background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--shadow-raised); overflow: hidden; border: 1px solid var(--border); }
-.rec-panel-head { background: var(--color-primary); color: var(--on-dark-primary); padding: 18px 24px; }
+.rec-panel-head { background: var(--fill-primary); color: var(--on-dark-primary); padding: 18px 24px; }
 .rec-panel-head h2 { color: var(--on-dark-primary); font-size: 20px; }
 .rec-panel-head p { margin: 4px 0 0; color: var(--on-dark-secondary); font-size: 14px; }
-.rec-cols, .rec-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 112px 284px; gap: var(--sp-4); align-items: center; padding: 12px 24px; }
+/* Right padding leaves the row's top-right corner free for the bulb. */
+.rec-cols, .rec-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 112px 284px; gap: var(--sp-4); align-items: center; padding: 12px 56px 12px 24px; }
 .rec-cols { background: var(--surface-alt); font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 .rec-cols span:nth-child(2), .rec-cols span:nth-child(3) { text-align: right; }
-.rec-row { border-top: 1px solid var(--border); transition: background 0.15s ease; }
+.rec-cols span:nth-child(4) { text-align: center; }   /* centred over the Invest / Hold / Sell buttons */
+.rec-row > :nth-child(4) { justify-self: center; }
+.rec-row { position: relative; border-top: 1px solid var(--border); transition: background 0.15s ease; }
 .rec-row:hover { background: var(--surface-alt); }
 .rec-fund-name { font-weight: 700; color: var(--text-primary); font-size: 15.5px; }
 .rec-fund-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 /* Why a fund was pre-selected (Prosperr conditions), or that the advisor changed it */
 .rec-rule:empty { display: none; }
-.rec-rule { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+/* Block with an inline icon, so a long reason wraps as text (icon stays on the first line). */
+.rec-rule { display: block; width: fit-content; max-width: 100%; margin-top: 6px; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.rec-rule > svg { vertical-align: -2px; margin-right: 5px; }
 .rec-rule.is-auto { background: var(--surface-tint-blue); color: var(--color-info); }
 .rec-rule.is-changed { background: var(--surface-tint-amber); color: var(--color-warning); }
+.rec-rule.is-review { background: var(--surface-tint-red); color: var(--color-negative); }
+/* Bulb: opens the plain-language "Why this recommendation?" popup. */
+.rec-bulb { position: absolute; top: 10px; right: 14px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--amber); background: var(--surface-tint-amber);
+  color: var(--amber); cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; }
+.rec-bulb:hover { background: var(--amber); color: #fff; transform: translateY(-1px); box-shadow: 0 6px 14px rgba(183, 121, 31, 0.35); }
+.rec-bulb:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.rec-explain { width: min(640px, calc(100 * var(--vw) - 32px)); }
+.rec-explain .app-dialog-head h2 { font-size: 19px; line-height: 1.3; }
+.rec-explain-call { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rec-explain-chip { padding: 4px 12px; border-radius: 999px; font-family: var(--font-display); font-size: 12px; font-weight: 700; background: var(--surface-alt); color: var(--text-secondary); }
+.rec-explain-chip.is-invest { background: var(--surface-tint-green); color: var(--color-positive); }
+.rec-explain-chip.is-hold { background: var(--surface-tint-blue); color: var(--color-info); }
+.rec-explain-chip.is-sell { background: var(--surface-tint-red); color: var(--color-negative); }
+.rec-explain-chip.is-review { background: var(--surface-tint-amber); color: var(--amber); }
+.rec-explain-chip.is-portfolio { background: var(--surface-tint-navy); color: var(--color-primary); }
+.rec-explain-body { display: grid; gap: var(--sp-5); }
+.rec-explain-body h3 { margin: 0 0 8px; font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.rec-explain-short p { margin: 0; padding: 12px 14px; border-left: 4px solid var(--amber); border-radius: 8px; background: var(--surface-tint-amber); font-size: 14.5px; line-height: 1.55; color: var(--text-primary); }
+.rec-explain-own { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.rec-explain-peers { margin: 0 0 10px; font-size: 13px; color: var(--text-secondary); }
+.rec-explain-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.rec-explain-list li { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; }
+.rec-explain-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.rec-explain-row strong { font-size: 14px; }
+.rec-explain-state { flex: none; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.rec-explain-state.is-good { background: var(--surface-tint-green); color: var(--color-positive); }
+.rec-explain-state.is-weak { background: var(--surface-tint-red); color: var(--color-negative); }
+.rec-explain-state.is-neutral { background: var(--surface-tint-blue); color: var(--color-info); }
+.rec-explain-state.is-none { background: var(--surface-alt); color: var(--text-muted); }
+.rec-explain-figure { margin: 6px 0 2px; font-size: 13.5px; color: var(--text-primary); }
+.rec-explain-meaning { margin: 0; font-size: 12.5px; color: var(--text-muted); }
+.rec-explain-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; color: var(--text-secondary); }
+.rec-explain-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+.rec-flags { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
 .rec-rule-reset { border: none; background: none; padding: 0 0 0 4px; font: inherit; font-weight: 700; color: var(--color-info); text-decoration: underline; cursor: pointer; }
 .rec-panel-head .rec-auto-note { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--lime); font-weight: 600; }
 .rec-metric { text-align: right; font-family: var(--font-display); font-weight: 700; color: var(--text-muted); font-size: 16px; line-height: 1.2; }
@@ -84,7 +128,10 @@
 
 /* ---------- Builder ---------- */
 .bld-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--sp-5); align-items: start; }
-.bld-panel { background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--shadow-raised); overflow: hidden; border: 1px solid var(--border); }
+/* overflow stays visible so a fund search list can open below the last row; the header rounds its own corners. */
+.bld-panel { background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--shadow-raised); overflow: visible; border: 1px solid var(--border); }
+.bld-panel > .bld-panel-head { border-radius: calc(var(--r-xl) - 1px) calc(var(--r-xl) - 1px) 0 0; }
+.bld-panel > :last-child { border-radius: 0 0 calc(var(--r-xl) - 1px) calc(var(--r-xl) - 1px); }
 .bld-panel-head { background: var(--color-accent); color: var(--text-on-primary); padding: 18px 24px; }
 .bld-panel-head h2 { color: var(--text-on-primary); font-size: 20px; }
 .bld-panel-head p { margin: 4px 0 0; font-size: 14px; color: var(--text-on-primary); }
@@ -96,6 +143,24 @@
 .bld-quick { display: flex; flex-wrap: wrap; gap: var(--sp-2); flex-basis: 100%; order: 1; }
 .bld-chip { border: 1px dashed var(--border-strong); background: var(--surface-alt); color: var(--text-secondary); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .bld-chip:hover { border-color: var(--color-info); color: var(--color-info); }
+/* Right of the amount row: the Lumpsum / SIP switch stacked above the Model Portfolio button, same width. */
+.bld-actions { margin-left: auto; display: grid; gap: 18px; justify-items: stretch; min-width: 220px; }
+.bld-actions .bld-model-btn { margin-left: 0; justify-content: center; }
+/* Lumpsum / SIP — a sliding pill switch; the coloured thumb moves under the chosen option. */
+.bld-mode { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 999px;
+  background: var(--surface-alt); border: 1px solid var(--border-strong); box-shadow: inset 0 1px 3px rgba(20, 52, 107, 0.12); isolation: isolate; }
+.bld-mode-thumb { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px;
+  background: linear-gradient(135deg, #3f8a3a, #5aa84f); box-shadow: 0 4px 10px rgba(63, 138, 58, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), background 0.25s ease, box-shadow 0.25s ease; }
+.bld-mode[data-mode="sip"] .bld-mode-thumb { transform: translateX(100%); background: linear-gradient(135deg, #14346b, #2b5aa7);
+  box-shadow: 0 4px 10px rgba(20, 52, 107, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+.bld-mode-btn { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px;
+  border: none; border-radius: 999px; background: transparent; color: var(--text-secondary); font-family: var(--font-display); font-weight: 700;
+  font-size: 14px; cursor: pointer; transition: color 0.2s ease; }
+.bld-mode-btn:hover:not([aria-pressed="true"]) { color: var(--color-primary); }
+.bld-mode-btn[aria-pressed="true"] { color: #fff; }
+.bld-mode-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .bld-mode-thumb { transition: none; } }
 /* Model Portfolio button — sits at the far right of the amount row */
 .bld-model-btn {
   --model-accent: var(--blue);
@@ -138,7 +203,8 @@
   font-weight: 600;
   color: var(--text-primary);
 }
-.bld-other { display: grid; grid-template-columns: 1fr 170px; gap: var(--sp-2); margin-top: var(--sp-2); }
+.bld-other { display: grid; gap: 6px; margin-top: var(--sp-2); }
+.bld-other-chosen { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: var(--fs-small); }
 .bld-pct { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-muted); font-weight: 700; }
 .bld-pct-input { text-align: right; }
 .bld-amount { text-align: right; font-family: var(--font-display); font-weight: 700; color: var(--color-primary); font-size: 16px; padding-top: 11px; }
@@ -169,10 +235,10 @@
 .fin-cover-art { position: relative; height: 240px; border-radius: 10px; overflow: hidden; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-card); }
 button.fin-cover-art { display: block; width: 100%; padding: 0; font: inherit; cursor: zoom-in; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out); }
 button.fin-cover-art:hover, button.fin-cover-art:focus-visible { transform: translateY(-3px); box-shadow: var(--shadow-raised); }
-.fin-cover-hover { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--color-primary); color: var(--text-on-primary); font-family: var(--font-display); font-weight: 700; font-size: 12px; white-space: nowrap; opacity: 0; transition: opacity 0.2s ease; }
+.fin-cover-hover { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--fill-primary); color: var(--text-on-primary); font-family: var(--font-display); font-weight: 700; font-size: 12px; white-space: nowrap; opacity: 0; transition: opacity 0.2s ease; }
 button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible .fin-cover-hover { opacity: 1; }
 .fin-preview-btn { margin-top: var(--sp-3); }
-.fin-doc-dialog { width: min(920px, calc(100vw - 32px)); height: calc(100vh - 48px); max-height: none; border: none; border-radius: var(--r-xl); padding: 0; box-shadow: var(--shadow-float); background: var(--surface); color: var(--text-primary); display: none; flex-direction: column; overflow: hidden; }
+.fin-doc-dialog { width: min(920px, calc(100 * var(--vw) - 32px)); height: calc(100 * var(--vh) - 48px); max-height: none; border: none; border-radius: var(--r-xl); padding: 0; box-shadow: var(--shadow-float); background: var(--surface); color: var(--text-primary); display: none; flex-direction: column; overflow: hidden; }
 .fin-doc-dialog[open] { display: flex; animation: site-reveal 0.35s var(--ease-out); }
 .fin-doc-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
 .fin-doc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-4); padding: 18px 22px; border-bottom: 1px solid var(--border); }
@@ -247,7 +313,7 @@ button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible 
 
 @media (max-width: 1080px) {
   .rec-layout, .bld-layout, .fin-layout { grid-template-columns: 1fr; }
-  .rec-side-stack, .fin-side { position: static; }
+  .fin-side { position: static; }
 }
 @media (max-width: 640px) {
   .rec-cols { display: none; }
@@ -258,3 +324,58 @@ button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible 
   .bld-fund { grid-column: 1 / -1; }
   .bld-other { grid-template-columns: 1fr; }
 }
+/* Final review — notes on funds without returns */
+.fin-notes { margin-top: var(--sp-4); padding: var(--sp-4) var(--sp-5); border: 1px solid var(--border); border-left: 4px solid var(--color-info); border-radius: var(--r-lg); background: var(--surface-tint-blue); }
+.fin-notes-head { display: flex; gap: var(--sp-3); align-items: flex-start; color: var(--color-info); }
+.fin-notes-head h2 { font-size: var(--fs-section-title); color: var(--color-primary); }
+.fin-notes-intro { margin: var(--sp-2) 0; color: var(--text-secondary); }
+.fin-notes ul { margin: 0; padding-left: var(--sp-5); display: grid; gap: var(--sp-2); }
+.fin-notes li { display: grid; gap: 2px; }
+.fin-notes li strong { color: var(--text-primary); }
+.fin-notes li span { color: var(--text-secondary); font-size: var(--fs-small); }
+.bld-picker { display: grid; gap: 6px; }
+/* Recommendation — Regular / Direct grouping */
+/* List options (Step 3): top of the side column, above the Recommendation summary. */
+/* No card behind the two buttons: they sit straight on the page banner. */
+.rec-toolbar { padding: 0; background: none; border: none; box-shadow: none; }
+.rec-toolbar-grid { display: grid; gap: 12px; }
+/* Each option is a bold gradient tile: icon · label + hint · on/off switch. White text on every tile. */
+.rec-tool { position: relative; overflow: hidden; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  width: 100%; padding: 14px; text-align: left; border: 0; border-radius: 14px; color: #fff; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(20, 52, 107, 0.22); transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease; }
+/* A shine sweeps across on hover (the button also lifts slightly). */
+.rec-tool::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; transform: skewX(-20deg);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0)); pointer-events: none; transition: left 0.6s ease; }
+.rec-tool:hover:not(:disabled)::after { left: 120%; }
+.rec-tool > * { position: relative; z-index: 1; }
+.rec-tool:hover:not(:disabled) { transform: translateY(-2px); }
+.rec-tool:active:not(:disabled) { transform: translateY(0); }
+.rec-tool:focus-visible { outline: 3px solid var(--lime); outline-offset: 3px; }
+/* Option A (owner's choice): a midnight-navy card with a thin gradient colour edge and a matching colour icon tile —
+   blue-teal · amber-gold (funds waiting) · green (all rated); a soft colour halo on hover. */
+.rec-tool.is-plan, .rec-tool.is-review, .rec-tool.is-review.is-done {
+  background: linear-gradient(#0f264d, #0f264d) padding-box, var(--edge) border-box; border: 1.5px solid transparent;
+  box-shadow: 0 10px 26px rgba(3, 14, 36, 0.45); }
+.rec-tool.is-plan { --edge: linear-gradient(135deg, #4f8df5, #46c2c9); --halo: rgba(79, 141, 245, 0.25); }
+.rec-tool.is-review { --edge: linear-gradient(135deg, #f09a2a, #f6c454); --halo: rgba(240, 154, 42, 0.25); }
+.rec-tool.is-review.is-done { --edge: linear-gradient(135deg, #2fb07c, #6fd6a3); --halo: rgba(47, 176, 124, 0.25); }
+.rec-tool:hover:not(:disabled) { box-shadow: 0 14px 32px rgba(3, 14, 36, 0.55), 0 0 0 3px var(--halo); }
+.rec-tool:disabled { cursor: default; }
+.rec-tool-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--edge, #4f8df5); color: #fff; }
+.rec-tool-text { display: grid; gap: 3px; min-width: 0; }
+.rec-tool-text strong { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 800; line-height: 1.2; white-space: nowrap; }
+.rec-tool-text small { font-size: 12.5px; line-height: 1.35; color: rgba(255, 255, 255, 0.72); }
+.rec-tool-badge { min-width: 24px; height: 24px; padding: 0 7px; display: inline-grid; place-items: center; border-radius: 999px;
+  background: #f2b33d; color: #3b2400; font-size: 13px; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) { .rec-tool, .rec-tool::after { transition: none; } .rec-tool:hover:not(:disabled) { transform: none; } }
+/* On / off switch: knob slides right and turns lime when the option is on. */
+.rec-switch { position: relative; width: 44px; height: 24px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.3); transition: background 0.18s ease; }
+.rec-switch i { position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.18s ease; }
+.rec-tool[aria-pressed="true"] .rec-switch { background: var(--lime); border-color: var(--lime); }
+.rec-tool[aria-pressed="true"] .rec-switch i { transform: translateX(20px); }
+.rec-tool:disabled .rec-switch { display: none; }
+.rec-plan-group { padding: 8px 24px; font-family: var(--font-display); font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-info); background: var(--surface-tint-blue); border-top: 1px solid var(--border); }
+.rec-plan { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.04em; vertical-align: middle; }
+.rec-plan.is-regular { background: var(--surface-tint-amber); color: var(--color-warning); }
+.rec-plan.is-direct { background: var(--surface-tint-green); color: var(--color-positive); }
+.rec-plan.is-etf { background: var(--surface-tint-blue); color: var(--color-info); }

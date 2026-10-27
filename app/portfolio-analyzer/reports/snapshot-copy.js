@@ -5,6 +5,7 @@
  */
 
 import { formatSnapshotDate } from "./snapshot-format.js";
+import { benchmarkPhrase } from "../../shared/format.js";
 
 // Options = the exact labels of the Prosperr logic (calculation-engine/portfolio-analyzer/report-profile.js).
 export { RISK_PROFILE_LABELS as RISK_PROFILES, HORIZON_LABELS as HORIZONS } from "../../../calculation-engine/index.js";
@@ -72,7 +73,7 @@ export function suggestedObservations(snapshot, portfolio) {
 export function sourceNote(snapshot) {
   const date = formatSnapshotDate(snapshot.asOf);
   const analytics = snapshot.trailingReturns || snapshot.risk
-    ? `Trailing returns and risk ratios (Alpha, Beta, Std Dev, Sharpe) are computed from month-end NAV history, benchmarked to the ${snapshot.benchmarkName ?? "benchmark"}` +
+    ? `Trailing returns and risk ratios (Alpha, Beta, Std Dev, Sharpe) are computed from month-end NAV history${snapshot.benchmarkName ? `, benchmarked to the ${benchmarkPhrase(snapshot.benchmarkName)}` : " (the benchmark comparison is shown when funds with a verified benchmark hold at least 80% of the value)"}` +
       (snapshot.coverage ? `; fund coverage ${snapshot.coverage.covered}/${snapshot.coverage.total}` : "") +
       ". Market-cap and sector splits are modelled estimates. "
     : "Composition, sector, market-cap, trailing-return and risk figures will appear once fund and NAV data is connected. ";

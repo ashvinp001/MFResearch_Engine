@@ -59,12 +59,13 @@ export function buildSnapshot(portfolio, fundData = null, { topN = DEFAULT_TOP_N
     .sort((p, q) => q.pct - p.pct || p.amc.localeCompare(q.amc));
 
   const returns = fundData?.trailingReturns ?? null;
-  const averageEdge = returns?.length
-    ? returns.reduce((sum, r) => sum + (r.portfolio - r.benchmark), 0) / returns.length
-    : null;
+  // Average edge only over periods where BOTH the portfolio and the benchmark have a figure.
+  const compared = (returns ?? []).filter((r) => Number.isFinite(r.portfolio) && Number.isFinite(r.benchmark));
+  const averageEdge = compared.length ? compared.reduce((sum, r) => sum + (r.portfolio - r.benchmark), 0) / compared.length : null;
 
   return {
-    asOf: portfolio.source.statementAsOf ?? portfolio.source.statementPeriod.to,
+    // Values are at the latest NAV when the portfolio was revalued (revalue.js), else as printed.
+    asOf: portfolio.valuation?.asOf ?? portfolio.source.statementAsOf ?? portfolio.source.statementPeriod.to,
     fundCount: active.length,
     amcCount: new Set(active.map((item) => item.holding.amc).filter(Boolean)).size,
     totals: {
@@ -81,6 +82,7 @@ export function buildSnapshot(portfolio, fundData = null, { topN = DEFAULT_TOP_N
     },
     amcAllocation,
     benchmarkName: fundData?.benchmarkName ?? null,
+    benchmarkBasis: fundData?.benchmarkBasis ?? null,   // "funds" (each fund's own index) | "market" (NIFTY 500) | null
     composition: fundData?.composition ?? null,
     sectors: fundData?.sectors ?? null,
     marketCap: fundData?.marketCap ?? null,
@@ -88,5 +90,6 @@ export function buildSnapshot(portfolio, fundData = null, { topN = DEFAULT_TOP_N
     averageEdge,
     risk: fundData?.risk ?? null,
     coverage: fundData?.coverage ?? null,
+    xirr: fundData?.xirr ?? null,
   };
 }

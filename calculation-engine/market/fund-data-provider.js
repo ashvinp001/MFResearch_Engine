@@ -18,7 +18,7 @@
  * @property {{ [isin:string]: FundInfo } | null} funds            per-fund analytics
  *
  * @typedef {Object} FundInfo
- * @property {"equity"|"debt"|"goldSilver"} assetClass
+ * @property {"equity"|"hybrid"|"debt"|"goldSilver"|null} assetClass
  * @property {string} category                                     e.g. "Mid Cap", "Flexi/Multi Cap"
  * @property {string} benchmark                                    e.g. "Nifty Midcap 150 TRI"
  * @property {{ r1y:number|null, r3y:number|null, r5y:number|null }} returns           % (3Y/5Y annualised)

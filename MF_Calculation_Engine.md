@@ -330,6 +330,15 @@ A printed total that cannot be found fails its check ("could not be verified"). 
 
 - Shape: 12 characters; Indian MF ISINs start `INF`.
 - Check digit (mod-10 on the digit-expanded string): replace letters A=10 … Z=35; over the full string INCLUDING the check digit, counting from the right starting at 1, double every digit at an EVEN position; sum all digits (split two-digit products); valid if sum % 10 = 0. Verified: `INF846K01EW2`, `US0378331005`, `INE002A01018`.
+
+**ISIN → AMFI scheme code (`identity/scheme-map.js`).** `buildSchemeMap(lists)` indexes the mapping
+lists in `data/schemes/` (Regular, Direct, ETF — kept apart) by ISIN: the growth ISIN, and the second
+AMFI ISIN column when printed. It refuses (SchemeMapError) a list whose count is wrong, an ISIN that
+fails the check digit, or any ISIN / scheme code that appears twice, so a lookup is never ambiguous.
+`mapHoldings(holdings, map)` matches by ISIN ONLY — never by name — and returns `matched`
+(holding + scheme code, name, AMC, asset class, category, plan, active) and `unmatched` with a plain
+reason: no valid ISIN · IDCW / dividend plan (the lists hold Growth only) · not in the AMFI list.
+The scheme code is the key used to fetch the fund's data.
 - Holdings are matched to market data by ISIN only — never by name.
 
 ### E15.5 Portfolio models (`portfolio-analyzer/`)
@@ -399,10 +408,19 @@ Bands: < 20 Conservative · 20–40 Moderately Conservative · 40–60 Moderate 
 
 Bands: < 1 Short Term · 1–3 Mid Term · 3–5 Mid to Long Term · ≥ 5 Long Term. Index funds tracking mid/small-cap indices are SEBI "Index Funds" → 7.0.
 
-**If any fund's category cannot be classified, Risk profile and Horizon are left blank and those funds are named — never guessed.** Diversification needs no category and is always computed.
+**Others (owner's rule, 22-Oct-2026):** a fund that fits no row of the two tables (international /
+overseas FoFs, debt index / target-maturity funds, retirement / children's funds, other FoFs, unclear
+names) is **"Others"**. It gets no equity factor and no years (never guessed), is LEFT OUT of both
+averages (Risk and Horizon are computed over the remaining funds), and is named with its share of the
+value next to the result, e.g. "1 fund in Others (1.34% of value, not counted): ABSL US Treasury 3-10
+Year Bonds ETFs Passive FoF". Only when every fund is in Others are Risk and Horizon left blank.
+Diversification counts every fund and needs no category.
 
-*Fund category (`fund-category.js`)* — taken from fund data when available, else from the scheme name ONLY when the name states it plainly; rules are checked IN ORDER:
-1. Not classified (never guessed): retirement/children's funds; international / overseas / Nasdaq / S&P 500 / regional funds; debt index, ETF, FoF or target-maturity funds (index/ETF/FoF + gilt/G-Sec/SDL/bond/debt/T-bill/treasury/CRISIL IBX); any other debt-looking name not matched below; "Commodities" equity funds.
+*Fund category (`fund-category.js`)* — from the AMFI (SEBI) category when available (a generic AMFI label —
+"Index Funds", "Other ETFs", "FoF Domestic / Overseas" — is read together with the fund's name, so a
+G-Sec index fund is not equity), else from the scheme name ONLY when the name states it plainly; rules
+are checked IN ORDER:
+1. Others (not in the tables, never guessed): retirement/children's funds; international / overseas / Nasdaq / S&P 500 / regional funds; debt index, ETF, FoF or target-maturity funds (index/ETF/FoF + gilt/G-Sec/SDL/bond/debt/T-bill/treasury/CRISIL IBX); any other debt-looking name not matched below; "Commodities" equity funds.
 2. Hybrids: arbitrage → equity savings → conservative hybrid / debt hybrid → balanced advantage / dynamic asset allocation → balanced hybrid → multi-asset → aggressive hybrid / equity & debt / equity hybrid.
 3. Gold / silver / precious metals.
 4. Debt: overnight → liquid → ultra short → low duration → money market → floater → short duration/term → banking & PSU → corporate bond → credit risk → dynamic bond → medium to long → medium duration/term → long duration → gilt / constant maturity.
@@ -411,9 +429,190 @@ Bands: < 1 Short Term · 1–3 Mid Term · 3–5 Mid to Long Term · ≥ 5 Long 
 
 **E15.5.7 Rule-based verdict suggestions (`recommendation-rules.js`) — framework, inactive until rules are supplied.** Rules `{ id, verdict, reason, when: [ { metric, op, value } ] }` are checked top to bottom; the first rule whose conditions ALL hold pre-selects the fund's verdict (the advisor can change it). Metrics: `absoluteReturnPct, gainAmount, currentValue, investedValue, weightPct, return1y/3y/5y, excess1y/3y/5y, assetClass, category`. Operators: `< <= > >= = != in, not in`. A condition on unavailable data is FALSE. The rule set (`app/portfolio-analyzer/recommendation-rules.js`) is currently empty.
 
+### E15.5.8 Current value at the latest NAV (`portfolio-analyzer/revalue.js`)
+
+Runs AFTER validation (E15.3), so every statement check compares the figures as printed.
+For each ACTIVE holding whose ISIN maps (E15.4) to a scheme with a latest stored NAV dated AFTER the
+statement's NAV date: `value = units × latest NAV`, computed with integers (no floating point) and
+rounded half-up to the paisa. The holding then carries the latest NAV, its date and that value; the
+statement's NAV / date / value are kept in `holding.statement`. Any other holding keeps the statement
+figures with the reason (redeemed · no units · not in the AMFI list, e.g. IDCW · no stored NAV · statement
+as recent). `portfolio.valuation = { asOf, latest, statement, reasons }`; asOf = the latest NAV date used,
+shown as "Data as on …". Every total, report and recommendation then uses these values.
+
+### E15.5.9 Fund and portfolio returns & risk from NAV history (`portfolio-analyzer/portfolio-performance.js`)
+
+**Data sources (owner's rule):** all return and risk calculations use the platform's own NAV store
+(Supabase, by AMFI scheme code). Benchmark / index data, sector details, the large/mid/small split,
+overlap and other holdings-level data come from PulseDB when connected; until then those figures are
+null ("—"), never estimated.
+
+- **Per fund:** 1Y / 3Y / 5Y trailing returns by E1/E2 at the fund's own ANCHOR (latest NAV).
+- **Portfolio — the client's CURRENT units, looked back:**
+  - T = the latest NAV date across the portfolio's funds.
+  - A fund's NAV on any date = E1 NEAREST-PREVIOUS (10-day cap). A fund takes part in a figure only
+    when it has a NAV for every date that figure needs.
+  - `Value(d) = Σ units × NAV(d)` over the funds taking part.
+  - Trailing ≤ 12M: `Value(T) / Value(T − p) − 1`.
+  - Trailing > 12M: `(Value(T) / Value(T − p)) ^ (365 / calendar days from T − p to T) − 1`.
+  - Risk (E12 R1–R3): the last 37 completed month-ends (last calendar day of each month before T's
+    month, NEAREST-PREVIOUS) → 36 monthly returns `Value(mₖ) / Value(mₖ₋₁) − 1`; σ, Sharpe and Sortino
+    with the same funds' 3Y CAGR and Rf 6.5%. Beta / Alpha need benchmark monthly returns → null.
+  - **Coverage:** a portfolio figure is published only when the funds taking part hold ≥ 80%
+    (`PORTFOLIO_ANALYTICS.minValueCoverage`) of the portfolio's current value (all active holdings);
+    otherwise "—".
+- **Asset group** for the reports (equity / debt / goldSilver) from the AMFI asset class, category and
+  name; hybrid, solution-oriented and domestic fund-of-funds stay unclassified until holdings data.
+
+Verified: the E5.1 worked examples (1M +3.45%, 3Y CAGR +14.44%) are unit tests; on a real 45-fund CAS
+the engine's fund 1Y returns equal an independent recomputation from the stored NAVs (e.g. −5.27%, +7.96%).
+
+- **Funds under a year old:** 1Y / 3Y / 5Y stay `—` (E1, never annualised); the fund shows its plain
+  return since its first NAV, `NAV_T / NAV_first − 1`, labelled "since <month year>". Across the active
+  universe on 21-Oct-2026: 431 funds are under 1 year, 1,300 under 3 years, 2,013 under 5 years; no
+  fund old enough lacks a figure.
+
+### E15.5.10 XIRR — portfolio and fund (`analytics/returns.js` xirr, `portfolio-analyzer/xirr.js`)
+
+`XIRR = r` solving `Σ CFᵢ / (1 + r)^(daysᵢ / 365) = 0`, `daysᵢ` = calendar days from the first cash flow
+(Excel XIRR convention). Solved by bisection on (−99.99%, +10,000%) to 1e-10; `—` when no rate solves it.
+Verified: Excel's documented example = 37.3362535%.
+
+Investor cash flows from the statement's transactions (exact paise from the printed amounts;
+investments negative):
+
+| Transaction | Cash flow | Why |
+|---|---|---|
+| Purchase / SIP / switch-in / NFO (amount > 0, units > 0) | − amount | money paid in (amount = units × price) |
+| *** Stamp Duty *** | − amount | paid on top of the purchase amount |
+| Redemption / switch-out / SIP rejection (amount < 0) | + amount | received — printed NET of STT / TDS |
+| *** STT Paid *** / *** TDS on Above *** | none | already deducted from the redemption amount |
+| IDCW / dividend payout (no units) | + amount | received |
+| IDCW reinvestment | none | no cash moves |
+| Lines without an amount (address, nominee, KYC) | none | not money |
+| Each active holding today | + current value (E15.5.8) on its NAV date | |
+
+Verified on a real CAS: redemption amount + STT line = units × price; purchase amount = units × price,
+stamp duty separate. A holding is left out — and the PORTFOLIO XIRR is then `—` (a partial XIRR would
+mislead) — when units are held at the start of the statement, it has no transactions, or opening units
++ transactions ≠ closing units (UNIT_BALANCE_MISMATCH). Real 45-fund CAS: 893 cash flows, engine XIRR
+8.7737% = an independent recomputation.
+
+### E15.5.11 Notes — funds without any trailing return (`portfolio-analyzer/return-notes.js`)
+
+Shown at the end of the final review ("Cross-verify and download"), so a `—` is never mistaken for a
+bug. Listed ONLY when a fund's 1Y, 3Y AND 5Y are all `—`, each with its reason:
+
+| Kind | Reason shown |
+|---|---|
+| young | Launched on <first NAV date> — under a year of NAV history (return since launch given) |
+| notListed | Not in the AMFI Growth fund list (e.g. IDCW plan) — statement value used |
+| noRecentNav | Latest NAV published is older than 31 days |
+| noHistory | No / too little NAV history stored |
+| unavailable | NAV history could not be loaded when the report was prepared |
+
+### E15.5.12 Portfolio Allocation from real holdings (`portfolio-analyzer/allocation.js`)
+
+Runs automatically on every CAS upload with each fund's latest disclosed holdings from PulseDB
+(benchmark, sector, market-cap and overlap data come from there; see the data-source rule in E15.5.9).
+Report Section 02, the one-pager and the dashboard read its output.
+
+**Holdings contract** (provider → engine), per fund ISIN: `{ asOn: "YYYY-MM", holdings: [{ name, isin,
+assetType, sector, marketCap, weight }] }` — `assetType` ∈ equity · foreignEquity · debt · cash · gold ·
+silver · reit · other; `marketCap` ∈ large · mid · small for domestic equity (SEBI/AMFI half-yearly list:
+ranks 1–100 / 101–250 / 251+); `weight` = % of the fund's net assets. Fund-of-funds are passed through
+to their underlying funds' holdings (weighted by the FoF's holding in each).
+
+1. **Weights:** used only when they total 100% ± 2 points (disclosures round); then scaled to exactly
+   100%. Otherwise the fund counts as "no holdings data".
+2. **Value:** each fund counts with its current value (E15.5.8): `part = value × weight / 100`.
+3. **Asset allocation:** equity = equity + foreignEquity; debt = debt + cash (cash, TREPS, T-bills);
+   gold/silver = gold + silver; other = REIT / InvIT / rest. `% = Σ parts / Σ covered value × 100`.
+4. **Market cap (equity):** over DOMESTIC equity only — `large % = Σ value × w(large) / Σ value × w(domestic
+   equity)`; same for mid, small. Domestic equity without a class is reported in coverage, never guessed.
+5. **Top sectors (equity):** `Σ value × w(sector) / Σ value × w(all equity)`, ranked largest first; no
+   sector → "Unclassified".
+6. **Fund-wise market-cap breakdown:** each fund's own large / mid / small split of its domestic equity —
+   actively managed equity funds only: index funds, ETFs and debt funds are not listed (owner's rule).
+   Its "Blended Equity" row = Σ (fund value × fund split) / Σ fund value over the funds listed.
+7. **Coverage:** a portfolio figure is shown only when funds with holdings data hold ≥ 80% of the
+   portfolio's current value; otherwise `—`. The holdings date ("as on") is reported.
+8. **Overlap (next, same data):** overlap(A, B) = Σ over common securities (by ISIN) of min(wA, wB).
+9. **Other:** REIT / InvIT and anything unclassifiable is shown as "Other (REIT / InvIT)" when above 0,
+   so the asset split always totals 100%. Small negative weights (net payables) are kept: the split is net.
+
+**PulseDB connection (live):** `data-pipeline/pulse_source.py` + `holdings_api.py`, served by the local
+server as `GET /api/fund-holdings?isins=…`. Endpoint `mf/scheme_holdings_security` (latest disclosed month
+when no `as_on` is sent); each row's asset type is derived, in this order: fund units ("ETF Units" /
+"Mutual Fund Units" / INF… ISIN → looked through, up to 2 levels) · cash (TREPS, repo, margins, net
+receivables) · debt (a credit rating, "Govt-Sec", or a coupon) · REIT/InvIT · foreign equity ("Overseas
+Equity" or a non-Indian ISIN) · Indian equity with Large / Mid / Small Cap · gold / silver (sector
+"Commodity" by name) · other Indian equity ISINs (no cap class) · other. Holdings are cached in Supabase
+(`holdings/<scheme code>.json`) for 24 hours. Known limit: arbitrage funds disclose their long stock
+positions but not the offsetting futures, so their equity shows gross (hedged).
+
+Verified by a hand-computed unit test (60k fund 80% equity / 20% debt + 40k gold fund → 48 / 12 / 40;
+large 62.5 / mid 37.5).
+
+### E15.5.13 Peer statistics and automatic Invest / Hold / Sell (`data-pipeline/peer_stats.py`, `portfolio-analyzer/auto-recommendation.js`)
+
+The decision rules (pillars, grades, fund types, portfolio stage, thresholds) are in **Recommendation_Logic.md**;
+this section fixes the figures they use. Computed daily after the NAV update for every current fund (latest NAV
+at most 7 days before AMFI's data date), each at its own ANCHOR T, and published to Supabase
+`stats/peer-stats.json` (percent figures to 4 decimals; Sharpe as a ratio).
+
+1. **Fund figures:** r1y / r3y / r5y by E2; Sharpe by E12 R1–R2 (month-end NAVs of the last 36 completed
+   months by E1 NEAREST-PREVIOUS; pairs where both month-ends have a NAV; min 30 returns); max drawdown by
+   E12 R5 over the daily NAVs from the 3Y start NAV (E1) to T; worst one-step fall over the same NAVs.
+2. **Peer group** = plan (Regular / Direct / ETF) + AMFI asset class + AMFI category, exactly as listed.
+3. **Median** per group and figure over funds that have it; only when ≥ 5 funds have it, else null.
+4. **Rank** on r3y and on Sharpe: 1 + number of peers with a strictly higher value (ties share the better
+   rank); quartile by E9. Only when ≥ 5 peers have the figure.
+5. **Consistency:** for each of the last 24 completed month-ends M (common to all funds, from AMFI's data
+   date), the fund's 3Y CAGR anchored at NAV(M) by E1 NEAREST-PREVIOUS (E2); the group median of that window
+   (≥ 5 funds). Consistency = % of windows with both values where fund ≥ median; null with fewer than 12.
+6. **Credit quality** (debt rule Q): Σ weight of debt rows rated AAA… / A1+ / Sovereign (or Govt-Sec
+   without a rating) + cash, ÷ Σ weight of debt + cash rows (PulseDB holdings). Null when unrated
+   non-government debt exceeds 10% of that total.
+6a. **Own benchmark (v1.1):** the fund's benchmark (benchmark bucket `mapping/funds.json`, PulseDB prices)
+   b1y / b3y / b5y by E2, anchored at the benchmark price on the fund's ANCHOR date by E1 NEAREST-PREVIOUS
+   (10-day cap), so both cover the same days; excess = fund − benchmark (pp). Index funds: tracking difference
+   = fund 3Y − benchmark 3Y. Null when the fund has no stored benchmark.
+6b. **Excluded benchmarks:** a Pulse-made multi-index blend (weights in its name, e.g. "NIFTY 50 Index(50%)+CRISIL
+   Short Term Index(50%)") is not used anywhere — checked 22-Oct-2026, these series do not follow their stated
+   weights (AB124 1Y −9.07% vs −3.35% rebuilt from its components by E7; OHB30 −7.83% vs +2.71%; OHB76 −8.31% vs
+   −2.42%). 297 funds / 52 blends. Official single indices (incl. CRISIL Hybrid 35+65 and NIFTY 50 Hybrid Composite
+   50:50) are used. Next step (owner's approval): build those blends from their component indices by E7.
+6c. **Sector check:** the sector index (or, for an unmapped ETF, its own NAV when that history has no break) vs
+   NIFTY 500 (OB56) at the same anchor — see Recommendation_Logic.md §4.2a.
+7. **ELSS locked units:** min(current units, Σ units of transactions with positive units dated after
+   asOf − 3 years) — redemptions consume the oldest units first (FIFO); all free 3 years after the last.
+
+Verified: unit tests on hand-computed series (`data-pipeline/tests/test_peer_stats.py`), and an independent
+recomputation of every figure with the browser engine's own E1 / E2 / E9 / E12 functions for six whole peer
+groups (`tests/peer-stats-check.html`: 1,952 figures, 0 mismatches).
+
+### E15.5.13a Benchmark in the reports (`portfolio-performance.js` fundInfo / buildFundData)
+
+- **Per fund:** its own benchmark (benchmark bucket, verified as in E15.5.13 6a/6b): name, and 1Y / 3Y / 5Y by
+  E2 anchored at the benchmark price on the fund's ANCHOR date (E1 NEAREST-PREVIOUS) — the blue benchmark line of
+  Fund Performance. No verified benchmark → "BENCHMARK — NOT AVAILABLE", values "—".
+- **Portfolio (blended benchmark):** each fund holds a position in its own benchmark worth the fund's value on T:
+  `units_b = units × NAV(T) / B(T)`; `BenchValue(d) = Σ units_b × B(d)` (E1 NEAREST-PREVIOUS), looked back exactly
+  like the portfolio (E15.5.9). A fund without a verified benchmark (or without a benchmark price on a needed date)
+  stands in with its own NAV — neutral. Trailing returns as E15.5.9; Beta / Alpha by E12 R4 on the same 36
+  month-ends; the benchmark's own Std Dev / Sharpe by E12 R1–R2. Used when funds with a verified benchmark
+  hold ≥ 80% of the portfolio's value. Name: the index when all benchmarked funds share one, else "Blended
+  Benchmark" (described as "each fund's own index, by value").
+- **Otherwise the broad market (owner, 22-Oct-2026: Alpha and Beta must always be shown):** every fund is
+  measured against NIFTY 500 (OB56) by the same method, and the report says so ("the funds' own benchmarks
+  are verified for less than 80% of the portfolio's value"). `benchmarkBasis` = "funds" | "market".
+- Verified by a unit test: funds that move exactly with their index give benchmark = portfolio, Beta 1, Alpha 0;
+  below 80% coverage nothing is published.
+
 ### E15.6 Market-data interfaces (pending data source)
 
-`market/fund-data-provider.js` (`getFundData`), `market/nav-provider.js`, `identity/scheme-map.js`, `analytics/returns.js`, `analytics/risk.js` exist with stable signatures and return `null` / "not implemented" until connected; every consumer renders `null` as "—". The formulas used when they are wired are specified in this file by the owner (E1–E5 and E12 hold the platform's existing return and risk methodology).
+NAV history is connected (E15.5.8, E15.5.9; `analytics/returns.js`, `analytics/risk.js` implement E1/E2/E12). `market/fund-data-provider.js` (`getFundData`) and `market/nav-provider.js` remain interfaces for the PulseDB-backed data and return `null` / "not implemented" until connected; every consumer renders `null` as "—". The formulas used when they are wired are specified in this file by the owner (E1–E5 and E12 hold the platform's existing return and risk methodology).
 
 ### E15.7 Tunables (`calculation-engine/config.js`)
 

@@ -2,8 +2,59 @@
  * Prosperr design tokens — the single source of truth for every visual value.
  * Brand palette is derived from the Prosperr logo (confirm hexes against
  * assets/prosperr-logo.png). Components reference SEMANTIC tokens only.
+ *
+ * Themes (Project_Specification_TEMP.md §3.1):
+ *  - Light (default) — the block below. It also applies to every element marked .ds-paper
+ *    (report sheets and report thumbnails), so client reports always look and print the
+ *    same, whichever theme the website shows.
+ *  - Dark — <html data-theme="dark">, set by app/shared/theme.js. It overrides only base
+ *    colours; derived tokens (gradients, tints built with var()) follow automatically.
  */
 :root {
+  /* Typography */
+  --font-display: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --fs-cover: 46px;
+  --fs-page-title: 25px;
+  --fs-section-title: 18px;
+  --fs-eyebrow: 11px;
+  --fs-kpi-value: 24px;
+  --fs-kpi-label: 11px;
+  --fs-table-head: 11px;
+  --fs-table-body: 13px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-badge: 10px;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Radius, motion, layout */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --accent-bar: 3px;
+  --content-max: 1440px;    /* wide but readable: content uses most of a laptop screen */
+  --page-gutter: clamp(16px, 3vw, 48px);  /* left/right page margin, scales with the screen */
+  --paper: #ffffff;         /* printed page background — never themed */
+  /* Fit to screen (index.html): on screens wider than 1440 px the whole site is scaled up by --fit (≤ 1.35), so it
+     fills the screen like any web page. Screen-relative sizes use --vh / --vw, which stay true at any scale. */
+  --fit: 1;
+  --vh: calc(1vh / var(--fit));
+  --vw: calc(1vw / var(--fit));
+}
+
+/* ---------- Light theme (default) and report paper ---------- */
+:root, .ds-paper {
+  color-scheme: light;
+
   /* Brand palette */
   --navy: #14346b;
   --blue: #2b5aa7;
@@ -22,7 +73,9 @@
   --violet: #6b4fbb;
 
   /* Semantic colors */
-  --color-primary: var(--navy);
+  --color-primary: var(--navy);   /* headings and primary text accents */
+  --fill-primary: var(--navy);    /* solid primary fills that carry --text-on-primary */
+  --table-head-bg: var(--navy);   /* data-table header row (white text) */
   --color-accent: var(--green);
   --color-positive: var(--gpos);
   --color-negative: var(--red);
@@ -36,6 +89,7 @@
   --text-secondary: #46536a;
   --text-muted: #5d6a80;
   --text-on-primary: #ffffff;
+  --disabled-opacity: 0.5;
 
   /* Surfaces */
   --surface: #ffffff;
@@ -74,44 +128,69 @@
   --backdrop: rgba(12, 31, 67, 0.55);
   --shadow-glow: 0 10px 24px rgba(43, 90, 167, 0.35);
 
-  /* Typography */
-  --font-display: "Barlow", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-  --fs-cover: 46px;
-  --fs-page-title: 25px;
-  --fs-section-title: 18px;
-  --fs-eyebrow: 11px;
-  --fs-kpi-value: 24px;
-  --fs-kpi-label: 11px;
-  --fs-table-head: 11px;
-  --fs-table-body: 13px;
-  --fs-body: 14px;
-  --fs-small: 12px;
-  --fs-badge: 10px;
-
-  /* Spacing scale */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 24px;
-  --sp-6: 32px;
-
-  /* Radius, shadow, focus */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 16px;
+  /* Shadows, focus */
   --shadow-card: 0 1px 2px rgba(20, 52, 107, 0.06), 0 4px 16px rgba(20, 52, 107, 0.06);
   --shadow-raised: 0 8px 28px rgba(20, 52, 107, 0.14);
   --shadow-float: 0 24px 60px rgba(15, 42, 89, 0.28);
   --shadow-up: 0 -6px 24px rgba(20, 52, 107, 0.08);
   --shadow-header: 0 6px 20px rgba(20, 52, 107, 0.08);
   --page-backdrop: #dfe5ee;
-  --r-xl: 22px;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --focus-ring: 0 0 0 3px rgba(43, 90, 167, 0.35);
+}
 
-  --accent-bar: 3px;
-  --content-max: 1440px;    /* wide but readable: content uses most of a laptop screen */
-  --page-gutter: clamp(16px, 3vw, 48px);  /* left/right page margin, scales with the screen */
+/* ---------- Dark theme: deep ink canvas, vivid identity colours ----------
+   Canvas and identity colours from the research-terminal palette (spec §3.1). Text tokens
+   pass WCAG AA on --surface and --surface-alt; --fill-primary passes with white text. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --navy: #3b82f6;           /* electric blue: accents, icons, chart series 1 */
+  --blue: #60a5fa;
+  --green: #34d399;
+  --lime: #a3e635;
+  --steel: #8fa8d9;
+  --grey: #64748b;
+  --red: #f87171;
+  --gpos: #34d399;
+  --amber: #f59e0b;
+  --navy-deep: #111b35;      /* footer: a step lighter than the page so it reads as its own band */
+  --teal: #14b8a6;
+  --violet: #8b5cf6;
+  --olive: #a3c95a;
+
+  --color-primary: #f1f5fb;
+  --fill-primary: #2563eb;
+  --table-head-bg: #1d2b4a;
+
+  --text-primary: #f5f8fd;
+  --text-secondary: #c9d4e6;
+  --text-muted: #a3b3cf;
+  --disabled-opacity: 0.7;
+
+  --surface: #182440;
+  --surface-alt: #080d18;
+  --surface-tint-navy: #22315a;
+  --surface-tint-green: #123a33;
+  --surface-tint-red: #442632;
+  --surface-tint-blue: #1b3460;
+  --surface-tint-amber: #3f3112;
+  --border: #354b78;
+  --border-strong: #4c67a3;
+
+  --grad-hero: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #0e9f6e 130%);
+  --grad-band:
+    radial-gradient(900px 420px at 88% -10%, rgba(34, 211, 238, 0.28), transparent 60%),
+    radial-gradient(700px 380px at 0% 110%, rgba(139, 92, 246, 0.28), transparent 60%),
+    linear-gradient(120deg, #101c40 0%, #1a2f6e 50%, #2546b0 100%);
+  --grad-text: linear-gradient(90deg, #ffffff 0%, #a5f3fc 100%);
+
+  --backdrop: rgba(3, 6, 14, 0.7);
+  --shadow-glow: 0 10px 24px rgba(34, 211, 238, 0.25);
+  --shadow-card: 0 0 0 1px rgba(96, 165, 250, 0.08), 0 4px 18px rgba(0, 0, 0, 0.5);
+  --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --shadow-up: 0 -6px 24px rgba(0, 0, 0, 0.4);
+  --shadow-header: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --page-backdrop: #070c18;
+  --focus-ring: 0 0 0 3px rgba(34, 211, 238, 0.45);
 }

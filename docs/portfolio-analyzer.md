@@ -217,8 +217,12 @@ sheet stays on one page through `fitSnapshotSheet`, which measures the sheet and
 rows, then zooms the holdings table, then zooms the whole page content, never below 70%. Average edge = mean of (portfolio − benchmark) across the
 trailing periods.
 
-**Detailed model.** Active holdings are grouped by asset class (Equity, Debt, Gold/Silver) and listed
-alphabetically within each group. Group totals are exact. A blended return is shown only when every
+**Detailed model.** Active holdings are grouped by asset class (Equity, Hybrid, Debt, Gold/Silver; Hybrid =
+AMFI's Hybrid class) and listed alphabetically within each group. Group totals are exact. Fund Performance
+(Section 03) lists equity, hybrid and gold/silver funds; debt funds and ETFs are left out. Portfolio Overlap
+(Section 04) is a lower-triangle matrix of the share of the same stocks held by each pair of equity funds (0–100%,
+`fundOverlap` on PulseDB holdings; both plans of a fund count once; up to 12 largest shown) with the pairs at 50%
+or above listed. Returns & Risk is Section 05, Conclusion & Recommendation Section 06. A blended return is shown only when every
 fund has that period. Without fund data, the holdings form one ungrouped list and analytics are `null`.
 
 **Fund data (Phase 2).** `getFundData(portfolio)` currently returns `null`. Its `FundData` /

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Detailed Report — replica of "Portfolio Review & Recommendation" (US Letter).
  *
  * Input:  { model (engine buildDetailedReport), clientName, settings: { riskProfile, horizon, diversification },
@@ -14,17 +14,18 @@ import { h } from "../../../design-system/components/dom.js";
 import { Logo } from "../../../design-system/components/basics.js";
 import { DonutSvg } from "../../../design-system/components/infographics.js";
 import { SNAPSHOT_COLORS } from "./snapshot-sheet.js";
-import { DASH, formatInr } from "../../shared/format.js";
+import { DASH, formatDate, formatInr } from "../../shared/format.js";
+import { trueSizeZoom } from "../../shared/print.js";
+import { OVERLAP_HIGH } from "../../../calculation-engine/portfolio-analyzer/detailed-report.js";
 import { rupees, signedPct, signedWhole, tone } from "./snapshot-format.js";
 import {
-  GROUP_LABEL, PERFORMANCE_NOTE, RETURNS_INTRO, WHAT_THESE_MEAN,
-  fundCommentary, observations, oneYearTag, sourceNote,
+  GROUP_LABEL, PERFORMANCE_NOTE, WHAT_THESE_MEAN, returnsIntro,
+  benchmarkColumn, fundCommentary, observations, oneYearTag, sourceNote,
 } from "./detailed-copy.js";
 
 const VERDICT_TEXT = { invest: "INVEST", hold: "HOLD", sell: "SELL" };
 
 // ---------- formatting helpers ----------
-const navText = (nav) => (nav === null || nav === undefined ? DASH : `₹${nav.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const pctWhole = (v) => (v === null || v === undefined ? DASH : `${Math.round(v)}%`);
 const pct1 = (v) => (v === null || v === undefined ? DASH : `${v.toFixed(1)}%`);
 const num2 = (v) => (v === null || v === undefined ? DASH : v.toFixed(2));
@@ -35,7 +36,7 @@ const rich = (parts) => parts.map((part) => (typeof part === "string" ? part : p
 // ---------- page scaffolding ----------
 function sectionPage({ eyebrow, title, footer }) {
   const body = h("div", { class: "dr-body" });
-  const el = h("section", { class: "dr-page" },
+  const el = h("section", { class: "dr-page ds-paper" },
     h("div", { class: "dr-frame" },
       h("header", { class: "dr-head" },
         h("div", {}, h("div", { class: "dr-eyebrow" }, eyebrow), h("h1", { class: "dr-title" }, title)),
@@ -49,6 +50,8 @@ function sectionPage({ eyebrow, title, footer }) {
 const overflowing = (body) => body.scrollHeight > body.clientHeight + 1;
 /** Smallest scale a table may shrink to before it continues on a new page (keeps text readable). */
 const MIN_TABLE_ZOOM = 0.6;
+/** The fund-wise market-cap table may shrink further so Section 02 fits on one page. */
+const MCAP_MIN_ZOOM = 0.45;
 
 /** Section writer: appends blocks and opens a continuation page when a block does not fit. */
 function sectionWriter(stage, spec) {
@@ -73,19 +76,20 @@ function sectionWriter(stage, spec) {
      * Keep a table on the current page by scaling it down (to a readable minimum).
      * Only if it still cannot fit does it flow onto a continuation page.
      */
-    fitTable({ className, head, groups, before }) {
+    fitTable({ className, head, groups, before, after = null, minZoom = MIN_TABLE_ZOOM }) {
       if (before) this.block(before);
       const table = h("table", { class: `dr-table ${className ?? ""}`.trim() }, head(), h("tbody", {}, groups.flat()));
-      const wrap = h("div", { class: "dr-fit" }, table);
+      const wrap = h("div", { class: "dr-fit" }, table, after);
       page.body.append(wrap);
       let zoom = 1;
-      while (overflowing(page.body) && zoom > MIN_TABLE_ZOOM) {
+      while (overflowing(page.body) && zoom > minZoom) {
         zoom = Math.round((zoom - 0.02) * 100) / 100;
         wrap.style.zoom = String(zoom);
       }
       if (overflowing(page.body)) {
         wrap.remove();
         this.table({ className, head, groups });
+        if (after) this.block(after);
       }
     },
     /** Flow table rows (or row groups) across pages, repeating the table head. */
@@ -114,7 +118,8 @@ function sectionWriter(stage, spec) {
 // ---------- document ----------
 export async function renderDetailedReport({ model, clientName, settings, reportDate }) {
   const asOn = reportDate ?? model.asOf;
-  const stage = h("div", { class: "dr-stage", "aria-hidden": "true" });
+  // Laid out at true size (the on-screen fit-to-screen scale cancelled), so pages break exactly as they print.
+  const stage = h("div", { class: "dr-stage", "aria-hidden": "true", style: { zoom: trueSizeZoom() } });
   document.body.append(stage);
   await document.fonts?.ready;
 
@@ -122,9 +127,10 @@ export async function renderDetailedReport({ model, clientName, settings, report
   section01(stage, model, clientName, settings, asOn);
   section02(stage, model);
   section03(stage, model);
+  sectionOverlap(stage, model);
   section04(stage, model);
   section05(stage, model);
-  // The advisor may skip the recommended portfolio; the report then ends with Section 05.
+  // The advisor may skip the recommended portfolio; the report then ends with Section 06.
   if (model.recommended) wayForward(stage, model);
 
   const doc = h("div", { class: "dr-doc" }, ...stage.children);
@@ -134,7 +140,7 @@ export async function renderDetailedReport({ model, clientName, settings, report
 
 // ---------- cover ----------
 function coverPage(model, clientName, asOn) {
-  return h("section", { class: "dr-page dr-cover" },
+  return h("section", { class: "dr-page dr-cover ds-paper" },
     h("div", { class: "dr-cover-top" }),
     h("div", { class: "dr-cover-frame" }),
     h("div", { class: "dr-cover-logo" }, Logo({ size: 67 })),
@@ -177,22 +183,20 @@ function section01(stage, model, clientName, settings, asOn) {
       kpi("XIRR", model.xirr === null ? DASH : signedPct(model.xirr, 1), "steel", tone(model.xirr)))));
 
   const head = () => h("thead", {}, h("tr", {},
-    h("th", { class: "fund" }, "FUND"), h("th", { class: "num" }, "WT %"), h("th", { class: "num" }, "QTY"), h("th", { class: "num" }, "NAV (₹)"),
+    h("th", { class: "fund" }, "FUND"), h("th", { class: "num" }, "WT %"),
     h("th", { class: "num" }, "INVESTED AMT", h("br"), "(₹)"), h("th", { class: "num" }, "CURRENT AMT", h("br"), "(₹)"), h("th", { class: "num" }, "PROFIT"), h("th", { class: "center" }, "PROSPERR RECOMMENDATION")));
 
   const groups = [];
   for (const group of model.holdings.groups) {
     if (group.key) {
       groups.push(h("tr", { class: `dr-group is-${group.key}` },
-        h("td", { colspan: 6 }, GROUP_LABEL[group.key]),
+        h("td", { colspan: 4 }, GROUP_LABEL[group.key]),
         h("td", { colspan: 2, class: "num" }, `${rupees(group.value)} · ${group.weightPct.toFixed(1)}%`)));
     }
     for (const row of group.rows) {
       groups.push(h("tr", {},
         h("td", { class: "fund" }, row.name),
         h("td", { class: "num wt" }, row.weightPct.toFixed(2)),
-        h("td", { class: "num" }, row.unitsRaw ?? DASH),
-        h("td", { class: "num" }, navText(row.nav)),
         h("td", { class: "num" }, rupees(row.invested)),
         h("td", { class: "num" }, rupees(row.current)),
         h("td", { class: `num profit ${tone(row.profit)}` }, signedWhole(row.profit)),
@@ -201,7 +205,7 @@ function section01(stage, model, clientName, settings, asOn) {
   }
   const total = model.holdings.total;
   groups.push(h("tr", { class: "dr-total" },
-    h("td", { class: "fund" }, "Total Portfolio"), h("td", { class: "num" }, "100.0"), h("td"), h("td"),
+    h("td", { class: "fund" }, "Total Portfolio"), h("td", { class: "num" }, "100.0"),
     h("td", { class: "num" }, rupees(total.invested)), h("td", { class: "num" }, rupees(total.current)),
     h("td", { class: `num profit ${tone(total.profit)}` }, signedWhole(total.profit)), h("td")));
 
@@ -240,6 +244,7 @@ function section02(stage, model) {
     { label: "Equity", value: c.equity, color: "var(--navy)" },
     { label: "Debt", value: c.debt, color: "var(--green)" },
     { label: "Gold / Silver", value: c.goldSilver, color: "var(--lime)", textColor: "var(--olive)" },
+    ...(c.other > 0 ? [{ label: "Other (REIT / InvIT)", value: c.other, color: "var(--grey)" }] : []),
   ] : null;
   const assetCard = h("div", { class: "dr-card" }, h("h3", { class: "dr-h in-card" }, "ASSET ALLOCATION"),
     assetItems ? h("div", { class: "dr-donut-row" },
@@ -260,7 +265,8 @@ function section02(stage, model) {
   w.block(h("div", { class: "dr-grid2 top" }, sectorCard, amcCard));
 
   const intro = h("div", {}, h("h2", { class: "dr-h" }, "MARKET-CAP BREAKDOWN — FUND WISE"),
-    h("p", { class: "dr-sub" }, "How each equity fund distributes across Large, Mid & Small cap."));
+    h("p", { class: "dr-sub" }, "How each equity fund distributes across Large, Mid & Small cap.",
+      model.marketCapByFund?.excludedNote ? ` ${model.marketCapByFund.excludedNote}` : ""));
   if (!model.marketCapByFund) {
     w.block(h("div", {}, intro, pending("The fund-wise market-cap split appears once fund data is connected.")));
     return;
@@ -274,16 +280,19 @@ function section02(stage, model) {
     h("td", { class: "center" }, pctWhole(r.small)), h("td", {}, composition(r)));
   const rows = model.marketCapByFund.rows.map((r) => row(r));
   if (model.marketCapByFund.blended) rows.push(row({ name: "Blended Equity", ...model.marketCapByFund.blended }, true));
-  w.table({
+  // Section 02 stays on ONE page: the fund-wise table (with its key) shrinks to fit; only a very long
+  // list (below MCAP_MIN_ZOOM) continues on a second page.
+  w.fitTable({
     className: "dr-mcap",
     before: intro,
     head: () => h("thead", {}, h("tr", {}, h("th", { class: "fund" }, "EQUITY FUND"), h("th", { class: "center" }, "LARGE"), h("th", { class: "center" }, "MID"), h("th", { class: "center" }, "SMALL"), h("th", {}, "COMPOSITION"))),
     groups: rows,
+    after: h("div", { class: "dr-keys" },
+      h("span", {}, h("i", { style: { background: "var(--navy)" } }), "Large"),
+      h("span", {}, h("i", { style: { background: "var(--blue)" } }), "Mid"),
+      h("span", {}, h("i", { style: { background: "var(--green)" } }), "Small")),
+    minZoom: MCAP_MIN_ZOOM,
   });
-  w.block(h("div", { class: "dr-keys" },
-    h("span", {}, h("i", { style: { background: "var(--navy)" } }), "Large"),
-    h("span", {}, h("i", { style: { background: "var(--blue)" } }), "Mid"),
-    h("span", {}, h("i", { style: { background: "var(--green)" } }), "Small")));
 }
 
 // ---------- Section 03 ----------
@@ -307,7 +316,7 @@ function section03(stage, model) {
       // The benchmark comparison line is always shown under each fund (as in the sample);
       // until fund data is connected the benchmark name and values read "—".
       const benchRow = h("tr", { class: "dr-perf-bench" },
-        h("td", {}, h("i"), row.benchmark ? row.benchmark.toUpperCase() : "CATEGORY BENCHMARK — PENDING"),
+        h("td", {}, h("i"), row.benchmark ? row.benchmark.toUpperCase() : "BENCHMARK — NOT AVAILABLE"),
         ...periods.map((p) => h("td", { class: "num" }, value(row.benchmarkReturns?.[p]))));
       groups.push([fundRow, benchRow]);
     }
@@ -315,28 +324,103 @@ function section03(stage, model) {
   w.table({
     className: "dr-perf",
     before: h("div", { class: "dr-h-row" }, h("h2", { class: "dr-h" }, "TRAILING RETURNS VS BENCHMARK"),
-      h("div", { class: "dr-keys" }, h("span", {}, h("i", { class: "up" }), "Beat benchmark"), h("span", {}, h("i", { class: "down" }), "Lagged benchmark"))),
+      h("div", { class: "dr-keys" }, h("span", {}, h("i", { class: "up" }), "Beat benchmark"), h("span", {}, h("i", { class: "down" }), "Lagged benchmark"),
+        model.asOf ? h("span", { class: "dr-asof" }, `Data as on ${formatDate(model.asOf)}`) : null)),
     head: () => h("thead", {}, h("tr", {}, h("th", {}, "FUND / BENCHMARK"), h("th", { class: "num" }, "1Y"), h("th", { class: "num" }, "3Y"), h("th", { class: "num" }, "5Y"))),
     groups,
   });
   w.block(h("p", { class: "dr-note" }, PERFORMANCE_NOTE));
 }
 
-// ---------- Section 04 ----------
+// ---------- Section 04: Portfolio Overlap ----------
+/** "Axis ELSS- Tax Saver Fund - Direct Growth (Demat)" → "Axis ELSS- Tax Saver Fund (Direct)". */
+function shortFundName(name) {
+  const plan = /\b(direct|dir)\b/i.test(name) ? "Direct" : /\b(regular|reg)\b/i.test(name) ? "Regular" : null;
+  const clean = name.replace(/\s*\((?:formerly|erstwhile)[^)]*\)/gi, "").replace(/\s*\((?:non[\s-]*)?demat\)/gi, "");
+  // The name runs up to the part that says "Fund" / "ETF" / "FoF" ("NIPPON INDIA - US EQUITY OPPORTUNITIES FUND - DIRECT …").
+  const parts = clean.split(/\s+-\s+/);
+  const end = parts.findIndex((p) => /\b(fund|etf|fof|index)\b/i.test(p));
+  const base = parts.slice(0, end >= 0 ? end + 1 : 1).join(" - ")
+    .replace(/\s+\b(direct|regular)\b(\s+plan)?(\s+growth)?(\s+option)?\s*$/i, "").replace(/\s+growth\s*$/i, "").trim();
+  return plan ? `${titleCase(base)} (${plan})` : titleCase(base);
+}
+/** A name the CAS prints in capitals, in title case; short abbreviations (US, ETF, BSE, SBI) stay as they are. */
+function titleCase(text) {
+  if (text !== text.toUpperCase()) return text;
+  return text.split(/(\s+|-)/).map((word) => (/^[A-Z&]{1,3}$/.test(word) && !/^(AND|OF|THE|FOR|CAP|MID|TAX|TOP|NEW|ONE)$/.test(word)
+    ? word : word.charAt(0) + word.slice(1).toLowerCase())).join("");
+}
+/** Overlap as a whole percentage: 0.34 → "34%". */
+const ovPct = (v) => `${Math.round(v * 100)}%`;
+/** Cell colour: light blue (no overlap) → deep navy (identical), as in the reference matrix. */
+function overlapColor(v) {
+  const from = [226, 234, 246], to = [30, 74, 150];
+  const t = Math.max(0, Math.min(1, v));
+  return `rgb(${from.map((c, i) => Math.round(c + (to[i] - c) * t)).join(",")})`;
+}
+
+function sectionOverlap(stage, model) {
+  const w = sectionWriter(stage, { eyebrow: "SECTION 04", title: "Portfolio Overlap", footer: "SECTION 04" });
+  const o = model.overlap;
+  w.block(h("p", { class: "dr-intro" },
+    "How much of each pair of funds is invested in the same stocks — the sum of the smaller weight of every stock both funds hold. ",
+    h("strong", {}, "100%"), " means identical portfolios, ", h("strong", {}, "0%"), " nothing in common; above ",
+    h("strong", {}, ovPct(OVERLAP_HIGH)), " the two funds give largely the same exposure."));
+  if (!o) {
+    w.block(pending("The overlap matrix appears once the funds' holdings are available (at least two funds that hold stocks)."));
+    return;
+  }
+  const n = o.funds.length;
+  const head = () => h("thead", {}, h("tr", {}, h("th", { class: "name" }, "FUND NAME"), ...o.funds.map((f) => h("th", { class: "num" }, String(f.n)))));
+  const rows = o.funds.map((f, i) => h("tr", {},
+    h("td", { class: "name" }, h("span", { class: "dr-ov-n" }, String(f.n)), titleCase(shortFundName(f.name))),
+    ...Array.from({ length: n }, (_, j) => {
+      if (j > i) return h("td", { class: "dr-ov-empty" });
+      const v = o.matrix[i][j];
+      if (v === null) return h("td", { class: "dr-ov-cell" }, DASH);
+      return h("td", { class: `dr-ov-cell ${i === j ? "is-self" : ""} ${v >= OVERLAP_HIGH ? "is-dark" : ""}`.trim(), style: { background: i === j ? "#1f4b99" : overlapColor(v) } }, ovPct(v));
+    })));
+  w.fitTable({
+    className: "dr-overlap",
+    head,
+    groups: rows,
+    after: h("div", { class: "dr-keys dr-ov-keys" },
+      h("span", {}, h("i", { style: { background: overlapColor(0.1) } }), "Low (below 25%)"),
+      h("span", {}, h("i", { style: { background: overlapColor(0.37) } }), "Moderate (25–50%)"),
+      h("span", {}, h("i", { style: { background: overlapColor(0.75) } }), "High (50% and above)"),
+      o.asOn ? h("span", { class: "dr-asof" }, `Holdings as disclosed for ${o.asOn}`) : null),
+    minZoom: 0.5,
+  });
+  const scope = "Equity funds are compared (both plans of a fund count once); hybrid, debt and gold funds are not, as only part of them — or none — is in stocks.";
+  w.block(h("p", { class: "dr-note dr-ov-note" }, o.hidden > 0
+    ? `The ${n} largest equity funds are shown; ${o.hidden} smaller one${o.hidden === 1 ? " is" : "s are"} included in the high-overlap list below. ${scope}`
+    : scope));
+  const more = o.pairs.length - PAIRS_SHOWN;
+  w.block(h("div", { class: "dr-ov-pairs" },
+    h("h2", { class: "dr-h" }, "HIGH OVERLAP PAIRS"),
+    o.pairs.length
+      ? h("ul", {}, o.pairs.slice(0, PAIRS_SHOWN).map((p) => h("li", {}, h("strong", {}, ovPct(p.overlap)), h("span", {}, `${titleCase(shortFundName(p.a))}  ·  ${titleCase(shortFundName(p.b))}`))))
+      : h("p", {}, `No two funds share ${ovPct(OVERLAP_HIGH)} or more of their stocks — the funds are well differentiated.`),
+    more > 0 ? h("p", {}, `+ ${more} more pair${more === 1 ? "" : "s"} at ${ovPct(OVERLAP_HIGH)} or above.`) : null));
+}
+const PAIRS_SHOWN = 10;
+
+// ---------- Section 05 ----------
 function section04(stage, model) {
-  const w = sectionWriter(stage, { eyebrow: "SECTION 04", title: "Returns & Risk", footer: "SECTION 04" });
-  w.block(h("p", { class: "dr-intro" }, RETURNS_INTRO));
+  const w = sectionWriter(stage, { eyebrow: "SECTION 05", title: "Returns & Risk", footer: "SECTION 05" });
+  w.block(h("p", { class: "dr-intro" }, returnsIntro(model)));
 
   const returnsByPeriod = new Map((model.portfolioReturns ?? []).map((r) => [r.period, r]));
   w.block(h("div", {},
-    h("h2", { class: "dr-h" }, "PORTFOLIO RETURN VS NIFTY 500"),
+    h("h2", { class: "dr-h" }, "PORTFOLIO RETURN VS BENCHMARK RETURN"),
     h("table", { class: "dr-table dr-ret" },
-      h("thead", {}, h("tr", {}, h("th", {}, "PERIOD"), h("th", { class: "num" }, "PORTFOLIO"), h("th", { class: "num" }, "NIFTY 500"), h("th", { class: "num" }, "EXCESS"))),
+      h("thead", {}, h("tr", {}, h("th", {}, "PERIOD"), h("th", { class: "num" }, "PORTFOLIO"), h("th", { class: "num" }, benchmarkColumn(model.benchmarkName)), h("th", { class: "num" }, "EXCESS"))),
       h("tbody", {}, ["1Y", "3Y", "5Y"].map((period) => {
         const r = returnsByPeriod.get(period);
-        return h("tr", {}, h("td", {}, period), h("td", { class: "num strong" }, r ? pct1(r.portfolio) : DASH),
-          h("td", { class: "num muted" }, r ? pct1(r.benchmark) : DASH),
-          h("td", { class: `num excess ${r ? (r.excess >= 0 ? "up" : "down") : ""}` }, r ? `${r.excess >= 0 ? "+" : ""}${r.excess.toFixed(1)}%` : DASH));
+        const excess = r?.excess ?? null;
+        return h("tr", {}, h("td", {}, period), h("td", { class: "num strong" }, pct1(r?.portfolio)),
+          h("td", { class: "num muted" }, pct1(r?.benchmark)),
+          h("td", { class: `num excess ${excess === null ? "" : excess >= 0 ? "up" : "down"}` }, excess === null ? DASH : `${excess >= 0 ? "+" : ""}${excess.toFixed(1)}%`));
       }))),
     h("div", { class: "dr-keys outline" }, h("span", {}, h("i", { class: "up" }), "Ahead of benchmark"), h("span", {}, h("i", { class: "down" }), "Behind benchmark"))));
 
@@ -346,12 +430,12 @@ function section04(stage, model) {
     h("div", {},
       h("h2", { class: "dr-h" }, "RISK MEASUREMENT (3-YEAR)"),
       h("table", { class: "dr-table dr-risk" },
-        h("thead", {}, h("tr", {}, h("th", {}, "MEASURE (3-YEAR)"), h("th", { class: "num" }, "PORTFOLIO"), h("th", { class: "num" }, "NIFTY 500"))),
+        h("thead", {}, h("tr", {}, h("th", {}, "MEASURE (3-YEAR)"), h("th", { class: "num" }, "PORTFOLIO"), h("th", { class: "num" }, benchmarkColumn(model.benchmarkName)))),
         h("tbody", {},
-          riskRow("Alpha", r ? num2(r.alpha) : DASH, r ? "0.00" : DASH),
-          riskRow("Beta", r ? num2(r.beta) : DASH, r ? num2(r.benchmark.beta) : DASH),
-          riskRow("Standard Deviation", r ? pct1(r.stdDev) : DASH, r ? pct1(r.benchmark.stdDev) : DASH),
-          riskRow("Sharpe Ratio", r ? num2(r.sharpe) : DASH, r ? num2(r.benchmark.sharpe) : DASH)))),
+          riskRow("Alpha", num2(r?.alpha), r?.benchmark ? "0.00" : DASH),
+          riskRow("Beta", num2(r?.beta), num2(r?.benchmark?.beta)),
+          riskRow("Standard Deviation", pct1(r?.stdDev), pct1(r?.benchmark?.stdDev)),
+          riskRow("Sharpe Ratio", num2(r?.sharpe), num2(r?.benchmark?.sharpe))))),
     h("div", {},
       h("h2", { class: "dr-h" }, "WHAT THESE MEAN"),
       h("div", { class: "dr-meanings" }, WHAT_THESE_MEAN.map((item) =>
@@ -363,22 +447,53 @@ function section04(stage, model) {
       h("div", { class: "dr-obs-title" }, h("span", { class: "dr-obs-icon" }, card.icon), card.title),
       h("p", {}, rich(card.parts))))));
 
-  const sells = model.holdings.groups.flatMap((group) => group.rows).filter((row) => row.verdict === "sell");
+  const sells = byFund(model.holdings.groups.flatMap((group) => group.rows).filter((row) => row.verdict === "sell"));
   if (sells.length) {
-    const names = sells.flatMap((row, i) => (i ? [", ", h("strong", {}, row.name)] : [h("strong", {}, row.name)]));
+    const total = sells.reduce((s, row) => s + row.current, 0);
+    const share = sells.reduce((s, row) => s + row.weightPct, 0);
     w.block(h("div", { class: "dr-change" },
       h("span", { class: "dr-change-icon" }, "!"),
-      h("div", {}, h("div", { class: "dr-change-title" }, "CHANGE IMMEDIATELY"),
-        h("p", {}, "Exit ", ...names, model.recommended
-          ? " — these holdings are marked Sell; redeploy the proceeds into the Prosperr Recommended Portfolio."
-          : " — these holdings are marked Sell; redeploy the proceeds into higher-conviction funds."))));
+      h("div", {},
+        h("div", { class: "dr-change-title" }, "RECOMMENDED EXITS"),
+        h("p", {}, `Based on our review, we recommend exiting the following ${sells.length === 1 ? "holding" : `${sells.length} holdings`}, `
+          + "which no longer meet our selection criteria:"),
+        h("ul", { class: "dr-change-list" }, sells.map((row) =>
+          h("li", {}, h("strong", {}, row.name, row.folios.length > 1 ? ` (${row.folios.length} folios)` : ""),
+            h("span", {}, `${formatInr(row.current, { whole: true })} · ${row.weightPct.toFixed(1)}% of the portfolio`)))),
+        h("p", {}, `Together ${formatInr(total, { whole: true })} (${share.toFixed(1)}% of the portfolio). We suggest redeploying the proceeds into `
+          + (model.recommended ? "the Prosperr Recommended Portfolio" : "higher-conviction funds suited to your risk profile")
+          + ". Please review exit loads and capital-gains tax before redeeming; units still in an ELSS lock-in cannot be redeemed until it ends."))));
   }
   w.block(h("p", { class: "dr-source" }, sourceNote(model)));
 }
 
-// ---------- Section 05 ----------
+/**
+ * One entry per fund and verdict: the same fund held in several folios with the same recommendation is
+ * written once (values added); folios given different recommendations stay separate, named by folio.
+ */
+function byFund(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const k = `${row.isin ?? row.name}|${row.verdict ?? ""}`;
+    const g = groups.get(k);
+    if (g) {
+      g.folios.push(row.folio);
+      g.current += row.current;
+      g.weightPct += row.weightPct;
+    } else groups.set(k, { ...row, folios: [row.folio] });
+  }
+  const list = [...groups.values()];
+  const split = new Set(list.map((g) => g.isin ?? g.name).filter((id, i, all) => all.indexOf(id) !== i));
+  return list.map((g) => ({
+    ...g,
+    folioNote: g.folios.length > 1 ? `${g.folios.length} folios, ${formatInr(g.current, { whole: true })} together`
+      : split.has(g.isin ?? g.name) && g.folios[0] ? `Folio ${g.folios[0]}` : null,
+  }));
+}
+
+// ---------- Section 06 ----------
 function section05(stage, model) {
-  const w = sectionWriter(stage, { eyebrow: "SECTION 05", title: "Conclusion & Recommendation", footer: "SECTION 05" });
+  const w = sectionWriter(stage, { eyebrow: "SECTION 06", title: "Conclusion & Recommendation", footer: "SECTION 06" });
 
   // Opening summary: Invest / Hold / Sell — count, value and share of the portfolio.
   const vs = model.verdictSummary;
@@ -401,15 +516,22 @@ function section05(stage, model) {
   // Grouped in the order Invest → Hold → Sell (then any fund without a verdict), alphabetical within each.
   const VERDICT_ORDER = { invest: 0, hold: 1, sell: 2 };
   const rank = (row) => VERDICT_ORDER[row.verdict] ?? 3;
-  const rows = model.holdings.groups.flatMap((group) => group.rows)
+  const rows = byFund(model.holdings.groups.flatMap((group) => group.rows))
     .sort((p, q) => rank(p) - rank(q) || p.name.localeCompare(q.name, "en", { sensitivity: "base" }));
   for (const row of rows) {
     const tag = oneYearTag(row);
     w.block(h("div", { class: `dr-verdict is-${row.verdict ?? "none"}` },
       h("div", { class: "dr-verdict-badge" }, badge(row.verdict)),
       h("div", {},
-        h("div", { class: "dr-verdict-head" }, h("strong", {}, row.name), h("span", { class: tag.tone || (row.verdict === "sell" ? "down" : "") }, tag.text)),
+        h("div", { class: "dr-verdict-head" },
+          h("strong", {}, row.name, row.folioNote ? h("span", { class: "dr-folio" }, ` (${row.folioNote})`) : null),
+          h("span", { class: tag.tone || (row.verdict === "sell" ? "down" : "") }, tag.text)),
         h("p", {}, fundCommentary(row, row.verdict, { hasRecommended: Boolean(model.recommended) })))));
+  }
+  if (model.suggestions?.length) {
+    w.block(h("div", { class: "dr-suggest" },
+      h("div", { class: "dr-suggest-title" }, "SUGGESTION BOX"),
+      h("ul", {}, model.suggestions.map((item) => h("li", {}, item.text)))));
   }
 }
 
@@ -419,8 +541,11 @@ function wayForward(stage, model) {
   const w = sectionWriter(stage, { eyebrow: "THE WAY FORWARD", title: "Prosperr Recommended Portfolio", footer: "PROSPERR RECOMMENDED PORTFOLIO" });
   const kpi = (label, value, variant, extra = "") =>
     h("div", { class: `dr-kpi big is-${variant} ${extra}` }, h("div", { class: "dr-kpi-label" }, label), h("div", { class: "dr-kpi-value" }, value));
+  // Lumpsum or SIP (the advisor's choice in Step 4) is stated in the amount tile, the table column and the note.
+  const sip = rec?.mode === "sip";
   w.block(h("div", { class: "dr-kpis three" },
-    kpi("AMOUNT TO INVEST", rupees(rec?.amount ?? null), "green", "tinted"),
+    kpi(sip ? "MONTHLY SIP AMOUNT" : "LUMPSUM AMOUNT",
+      rupees(rec?.amount ?? null), "green", "tinted"),
     kpi("FUNDS RECOMMENDED", String(rec?.rows.length ?? 0), "navy"),
     kpi("TOTAL ALLOCATION", rec ? allocText(rec.totalPct) : DASH, "green", "green-value")));
 
@@ -446,7 +571,7 @@ function wayForward(stage, model) {
   w.table({
     className: "dr-way",
     head: () => h("thead", {}, h("tr", {}, h("th", { class: "fund" }, "FUND"), h("th", { class: "center" }, "CATEGORY"), h("th", { class: "center" }, "BENCHMARK"),
-      h("th", { class: "num" }, "ALLOC."), h("th", { class: "num" }, "1Y"), h("th", { class: "num" }, "3Y"), h("th", { class: "num" }, "5Y"), h("th", { class: "num" }, "AMOUNT"))),
+      h("th", { class: "num" }, "ALLOC."), h("th", { class: "num" }, "1Y"), h("th", { class: "num" }, "3Y"), h("th", { class: "num" }, "5Y"), h("th", { class: "num" }, sip ? ["MONTHLY SIP", h("br"), "(₹)"] : ["LUMPSUM", h("br"), "(₹)"]))),
     groups: rows,
   });
   w.block(h("div", { class: "dr-keys" },

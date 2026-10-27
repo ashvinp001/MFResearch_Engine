@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scheme Mapping Check</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f4f7fc; color: #18233a; }
+    h1 { font-size: 20px; margin: 0 0 4px; color: #14346b; }
+    p.note { margin: 0 0 14px; color: #46536a; font-size: 14px; }
+    .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #fff; padding: 12px; border-radius: 10px; border: 1px solid #dfe7f4; }
+    input[type=password] { padding: 8px 10px; border: 1px solid #c6d3e8; border-radius: 6px; font-size: 14px; }
+    pre { background: #fff; border: 1px solid #dfe7f4; border-radius: 10px; padding: 12px; font-size: 12px; white-space: pre-wrap; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Scheme mapping check</h1>
+  <p class="note">Maps every fund in a CAS to its AMFI scheme code using data/schemes/ and checks the plan (Regular / Direct)
+    and the fund name agree. Read inside this browser only. Shows fund names and codes only: no client name, no values.</p>
+  <div class="bar">
+    <input type="file" id="file" accept=".pdf,application/pdf">
+    <input type="password" id="password" placeholder="PDF password (if any)">
+    <button id="run">Check</button>
+  </div>
+  <pre id="results">Choose a CAS PDF and press Check. Also supports ?file=local/name.pdf for a file in tests/pdf-fixtures/.</pre>
+<script type="module">
+  import * as pdfjs from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+  import { analyzeCasPdf, buildSchemeMap, mapHoldings } from "../calculation-engine/index.js";
+  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+
+  const out = document.getElementById("results");
+  const STOP = new Set(["fund", "plan", "the", "of", "and", "direct", "regular", "growth", "option", "scheme", "mutual", "india", "erstwhile", "formerly", "demat", "non"]);
+  const words = (text) => new Set(String(text).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP.has(w)));
+
+  /** Share of the AMFI name's words that also appear in the CAS name (1 = all). */
+  function nameAgreement(casName, amfiName) {
+    const cas = words(casName);
+    const amfi = [...words(amfiName)];
+    return amfi.length ? amfi.filter((w) => cas.has(w)).length / amfi.length : 0;
+  }
+  function casPlan(name) {
+    if (/\b(direct|dir)\b/i.test(name)) return "Direct";
+    if (/\b(etf|bees)\b/i.test(name)) return "ETF";
+    return "Regular";
+  }
+
+  async function check(data, password) {
+    const lists = await Promise.all(["regular", "direct", "etf"].map(async (f) => (await fetch(`../data/schemes/${f}.json`)).json()));
+    const map = buildSchemeMap(lists);
+    const portfolio = await analyzeCasPdf({ data, password, fileName: "check.pdf", pdfjs });
+    const { matched, unmatched } = mapHoldings(portfolio.holdings, map);
+    const lines = [];
+    let review = 0;
+    for (const { holding, scheme } of matched) {
+      const agree = nameAgreement(holding.schemeName, scheme.schemeName);
+      const planOk = casPlan(holding.schemeName) === scheme.plan;
+      const ok = planOk && agree >= 0.5;
+      if (!ok) review++;
+      lines.push(`${ok ? "OK    " : "REVIEW"} ${holding.isin} → ${scheme.schemeCode} [${scheme.plan}${scheme.active ? "" : ", inactive"}] ${scheme.schemeName} | ${scheme.category}` +
+        (ok ? "" : `\n         CAS name: ${holding.schemeName} (plan ${planOk ? "agrees" : "DIFFERS"}, name words ${Math.round(agree * 100)}%)`));
+    }
+    for (const { holding, reason } of unmatched) lines.push(`MISS   ${holding.isin ?? "(no ISIN)"} ${holding.schemeName}\n         ${reason}`);
+    const head = `RESULT: ${matched.length}/${portfolio.holdings.length} mapped | ${unmatched.length} not mapped | ${review} to review` +
+      ` | fund list: ${map.size} schemes, AMFI data as of ${map.dataAsOf}`;
+    const text = [head, "", ...lines].join("\n");
+    out.textContent = text;
+    return text;
+  }
+
+  document.getElementById("run").addEventListener("click", async () => {
+    const file = document.getElementById("file").files[0];
+    if (!file) return;
+    out.textContent = "Reading…";
+    try { await check(await file.arrayBuffer(), document.getElementById("password").value); }
+    catch (error) { out.textContent = `Could not read: ${error.message}`; }
+  });
+
+  const params = new URLSearchParams(location.search);
+  const fixture = params.get("file");
+  if (fixture) {
+    let text;
+    try { text = await check(await (await fetch(`pdf-fixtures/${fixture}`)).arrayBuffer(), params.get("pw") ?? ""); }
+    catch (error) { text = `ERROR ${error.code ?? ""}: ${error.message}`; }
+    fetch("/__test-results", { method: "POST", body: text }).catch(() => {});
+  }
+</script>
+</body>
+</html>

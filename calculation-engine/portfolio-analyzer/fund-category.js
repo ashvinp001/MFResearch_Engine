@@ -2,7 +2,8 @@
  * SEBI fund category of a holding — needed for the Risk Profile and Horizon logic.
  *
  * Input:  a holding, and its fund info from fundData (Phase 2, may be null).
- * Output: { category, source: "fund data" | "scheme name" } or null (unclassified).
+ * Output: { category, source: "fund data" | "scheme name" | "not in the logic tables" } — category "others"
+ *         when the fund fits no row of the Risk / Horizon tables.
  *
  * A CAS does not print the SEBI category, so it is taken from fundData.category when
  * available, else read from the scheme name — but ONLY when the name states the
@@ -41,6 +42,9 @@ export const FUND_CATEGORY = Object.freeze({
   EQUITY: "equity", // large, large & mid, flexi, multi, focused, value, contra, dividend yield, ELSS, index, sectoral/thematic
   MID_CAP: "midCap",
   SMALL_CAP: "smallCap",
+  // Not in the logic tables (international / overseas FoFs, debt index & target-maturity funds,
+  // solution-oriented, other FoFs, unclear names): shown as "Others", never given a factor.
+  OTHERS: "others",
 });
 
 const C = FUND_CATEGORY;
@@ -109,9 +113,37 @@ export function categoryFromText(text) {
   return null;
 }
 
+/** Why a fund is in Others — the first matching reason, in plain words. */
+const OTHERS_REASONS = [
+  [/retirement|children|\bchild\b/, "Solution-oriented (retirement / children's) fund"],
+  [/international|global|overseas|nasdaq|s&p\s*500|\bworld\b|emerging\s*markets?|china|japan|europe|\basia|hang\s*seng|taiwan|\bfang\b|\bus\b/, "International / overseas fund"],
+  [/(\bindex\b|\betf\b|target\s*maturity|bharat\s*bond|\bfof\b|fund\s*of\s*funds?)/, "Debt index, target-maturity, ETF or fund-of-funds"],
+  [/commodit/, "Commodities fund"],
+];
+
+export function othersReason(holding, info = null) {
+  const text = `${info?.category ?? ""} ${holding.schemeName ?? ""}`.toLowerCase();
+  const found = OTHERS_REASONS.find(([pattern]) => pattern.test(text));
+  if (found) return `${found[1]} — not in the Risk / Horizon tables`;
+  return info?.category
+    ? `AMFI category "${info.category}" is not in the Risk / Horizon tables`
+    : "Category not known (no AMFI data, and the name does not state it)";
+}
+
+/** AMFI labels that say nothing about what the fund holds — the name must decide (a G-Sec index fund is not equity). */
+const GENERIC_AMFI_CATEGORY = /^(index funds|other etfs|fof\b|fund of funds|other scheme)/i;
+
+/**
+ * The fund's category from its AMFI (SEBI) category; for a generic AMFI label ("Index Funds", "Other ETFs",
+ * "FoF Domestic / Overseas") the label is read together with the fund's name. Without AMFI data, from the
+ * name alone. A fund that fits no row of the logic tables is "Others" (source "not in the logic tables").
+ */
 export function classifyFund(holding, info = null) {
-  const fromData = info?.category ? categoryFromText(info.category) : null;
-  if (fromData) return { category: fromData, source: "fund data" };
+  if (info?.category) {
+    const text = GENERIC_AMFI_CATEGORY.test(info.category.trim()) ? `${info.category} ${holding.schemeName ?? ""}` : info.category;
+    const fromData = categoryFromText(text);
+    return fromData ? { category: fromData, source: "fund data" } : { category: FUND_CATEGORY.OTHERS, source: "not in the logic tables", reason: othersReason(holding, info) };
+  }
   const fromName = categoryFromText(holding.schemeName);
-  return fromName ? { category: fromName, source: "scheme name" } : null;
+  return fromName ? { category: fromName, source: "scheme name" } : { category: FUND_CATEGORY.OTHERS, source: "not in the logic tables", reason: othersReason(holding, info) };
 }

@@ -3,8 +3,8 @@
 .ad-dialog {
   --ad-tone: var(--color-warning);
   --ad-tint: var(--surface-tint-amber);
-  width: min(720px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  width: min(720px, calc(100 * var(--vw) - 32px));
+  max-height: calc(100 * var(--vh) - 32px);
   padding: 0;
   border: none;
   border-top: 4px solid var(--ad-tone);

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Sign in</title>
+  <link rel="icon" type="image/png" href="/assets/prosperr-icon.png">
+  <style>
+    /* Team sign-in (served by serve.ps1 to other computers until they enter the site password). Self-contained. */
+    :root { --navy: #14346b; --blue: #2b5aa7; --green: #5aa84f; --lime: #aed495; --text: #18233a; --muted: #5d6a80; --red: #c0453b; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: grid; place-items: center; padding: 16px;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--text);
+      background:
+        radial-gradient(900px 480px at 85% -10%, rgba(90, 168, 79, 0.55), transparent 60%),
+        radial-gradient(800px 460px at 0% 110%, rgba(111, 144, 201, 0.55), transparent 60%),
+        linear-gradient(135deg, #0c1f43 0%, var(--navy) 40%, var(--blue) 100%);
+      overflow: hidden;
+    }
+    body::before, body::after { content: ""; position: fixed; border-radius: 50%; filter: blur(40px); opacity: 0.55; pointer-events: none; }
+    body::before { width: 360px; height: 360px; background: var(--lime); top: -80px; left: 8%; }
+    body::after { width: 420px; height: 420px; background: #6f90c9; bottom: -140px; right: 6%; }
+    .glass {
+      position: relative; z-index: 1; width: min(420px, 100%); padding: 32px 30px 26px;
+      border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.45);
+      background: rgba(255, 255, 255, 0.22);
+      backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+      box-shadow: 0 24px 60px rgba(8, 20, 45, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      color: #fff; text-align: center;
+    }
+    .logo { display: inline-block; padding: 8px 14px; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+    .logo img { display: block; height: 34px; }
+    h1 { margin: 18px 0 4px; font-size: 22px; font-weight: 700; }
+    p.sub { margin: 0 0 20px; color: rgba(255, 255, 255, 0.85); font-size: 14px; }
+    form { display: grid; gap: 12px; text-align: left; }
+    label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.9); }
+    .field { position: relative; }
+    input {
+      width: 100%; padding: 12px 44px 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.9); color: var(--text); font-size: 15px; outline: none;
+    }
+    input:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(174, 212, 149, 0.6); }
+    .show { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px; }
+    button.go {
+      margin-top: 4px; padding: 12px; border: 0; border-radius: 12px; cursor: pointer;
+      background: linear-gradient(135deg, var(--navy), var(--blue) 60%, var(--green) 140%); color: #fff; font-size: 15px; font-weight: 700;
+      box-shadow: 0 8px 22px rgba(8, 20, 45, 0.35);
+    }
+    button.go:disabled { opacity: 0.6; cursor: wait; }
+    .error { min-height: 20px; margin: 0; font-size: 13px; font-weight: 600; color: #ffe1de; }
+    .note { margin: 16px 0 0; font-size: 12px; color: rgba(255, 255, 255, 0.75); }
+  </style>
+</head>
+<body>
+  <main class="glass" role="dialog" aria-labelledby="title" aria-describedby="sub">
+    <span class="logo"><img src="/assets/prosperr-logo.png" alt="Prosperr"></span>
+    <h1 id="title">Prosperr.io Wealth</h1>
+    <p class="sub" id="sub">Enter the team password to open the website.</p>
+    <form id="form" autocomplete="off">
+      <label for="password">Password</label>
+      <div class="field">
+        <input id="password" type="password" required autofocus autocomplete="current-password" aria-describedby="error">
+        <button type="button" class="show" id="show" aria-label="Show password">Show</button>
+      </div>
+      <p class="error" id="error" role="alert"></p>
+      <button class="go" id="go" type="submit">Enter</button>
+    </form>
+    <p class="note">Client statements are read in your own browser and are never uploaded.</p>
+  </main>
+  <script>
+    const form = document.getElementById("form"), input = document.getElementById("password");
+    const error = document.getElementById("error"), go = document.getElementById("go"), show = document.getElementById("show");
+    show.addEventListener("click", () => {
+      const hidden = input.type === "password";
+      input.type = hidden ? "text" : "password";
+      show.textContent = hidden ? "Hide" : "Show";
+      show.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.textContent = "";
+      go.disabled = true;
+      try {
+        const response = await fetch("/__login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) });
+        if (response.ok) { location.reload(); return; }
+        error.textContent = response.status === 429 ? "Too many attempts. Please wait 10 minutes and try again." : "Incorrect password. Please try again.";
+        input.select();
+      } catch {
+        error.textContent = "Could not reach the server. Check that you are on the same network.";
+      } finally {
+        go.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -90,18 +90,19 @@
 .dr-table td.up, .dr-table .up { color: var(--gpos); }
 .dr-table td.down, .dr-table .down { color: var(--red); }
 
-.dr-holdings th:nth-child(1) { width: 34%; }
-.dr-holdings th:nth-child(2) { width: 6%; }
-.dr-holdings th:nth-child(3), .dr-holdings th:nth-child(4) { width: 8.3%; }
-.dr-holdings th:nth-child(5) { width: 11.6%; }
-.dr-holdings th:nth-child(6) { width: 11.4%; }
-.dr-holdings th:nth-child(7) { width: 7.3%; }
-.dr-holdings th:nth-child(8) { width: 13.1%; text-align: center; }
+/* FUND · WT % · INVESTED · CURRENT · PROFIT · RECOMMENDATION */
+.dr-holdings th:nth-child(1) { width: 44%; }
+.dr-holdings th:nth-child(2) { width: 7%; }
+.dr-holdings th:nth-child(3), .dr-holdings th:nth-child(4) { width: 13.5%; }
+.dr-holdings th:nth-child(5) { width: 9%; }
+.dr-holdings th:nth-child(6) { width: 13%; text-align: center; }
 .dr-holdings td.fund { font-size: 10.4px; }
 .dr-holdings th.num { text-align: right; }
 .dr-group td { background: var(--surface-alt); font-family: var(--font-display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; padding: 5px 12px; border-left-width: 0; border-right-width: 0; }
 .dr-group td:first-child { box-shadow: inset 4px 0 0 var(--navy); color: var(--navy); }
 .dr-group td.num { letter-spacing: 0.02em; font-weight: 600; font-size: 9px; color: var(--text-secondary); }
+.dr-group.is-hybrid td { background: var(--surface-tint-navy); }
+.dr-group.is-hybrid td:first-child { box-shadow: inset 4px 0 0 var(--blue); color: var(--blue); }
 .dr-group.is-debt td { background: var(--surface-tint-green); }
 .dr-group.is-debt td:first-child { box-shadow: inset 4px 0 0 var(--green); color: var(--green); }
 .dr-group.is-goldSilver td { background: var(--surface-tint-blue); }
@@ -169,7 +170,27 @@
 .dr-perf-bench td i { display: inline-block; width: 3px; height: 10px; border-radius: 1px; background: var(--blue); margin-right: 8px; vertical-align: -1px; }
 .dr-perf-bench td.num { font-size: 10px; color: var(--blue); }
 
-/* Section 04 */
+/* Section 04 — Portfolio Overlap (lower-triangle matrix, shaded by overlap) */
+.dr-overlap { table-layout: fixed; border-collapse: separate; border-spacing: 2px; margin-top: 12px; }
+.dr-overlap th { background: transparent !important; color: var(--navy) !important; font-family: var(--font-display); font-size: 9.5px; font-weight: 700; padding: 4px 2px; border: none !important; }
+.dr-overlap th.name { width: 36%; text-align: left; padding-left: 0; }
+.dr-overlap th.num { text-align: center; }
+.dr-overlap td { border: none !important; padding: 0; height: 28px; }
+.dr-overlap td.name { padding: 0 8px 0 0; font-size: 9.5px; font-weight: 600; color: var(--text-primary); line-height: 1.25; }
+.dr-ov-n { display: inline-block; min-width: 16px; margin-right: 4px; font-family: var(--font-display); font-weight: 700; color: var(--navy); }
+.dr-ov-cell { text-align: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; color: var(--navy); border-radius: 2px; }
+.dr-ov-cell.is-dark, .dr-ov-cell.is-self { color: #fff; }
+.dr-ov-empty { background: transparent; }
+/* Breathing room under the matrix: key, note and the pairs list sit clearly apart from it. */
+.dr-ov-keys { margin-top: 22px; }
+.dr-ov-note { margin-top: 12px; }
+.dr-ov-pairs { margin-top: 30px; }
+.dr-ov-pairs ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.dr-ov-pairs li { display: flex; gap: 12px; align-items: baseline; padding: 6px 10px; border-left: 3px solid var(--navy); background: var(--surface-tint-blue); border-radius: 4px; font-size: 10px; color: var(--text-primary); }
+.dr-ov-pairs li strong { font-family: var(--font-display); color: var(--navy); min-width: 30px; }
+.dr-ov-pairs p { margin: 6px 0 0; font-size: 10px; color: var(--text-secondary); }
+
+/* Section 05 */
 .dr-ret th:first-child { width: 21.7%; }
 .dr-ret td { padding: 9px 12px; font-size: 10.5px; }
 .dr-ret td.num.strong { color: var(--navy); font-weight: 700; font-family: var(--font-display); font-size: 11px; }
@@ -205,11 +226,22 @@
 .dr-obs p strong { color: var(--text-primary); }
 .dr-obs p strong.up { color: var(--gpos); }
 .dr-obs p strong.down { color: var(--red); }
+.dr-folio { font-weight: 500; color: var(--text-secondary); }
+.dr-keys .dr-asof { padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border, #d9dee7); font-weight: 600; color: var(--text-secondary); }
 .dr-change { display: flex; gap: 12px; margin-top: 10px; padding: 11px 16px 12px; border: 1px solid var(--surface-tint-red); border-left: 4px solid var(--red); border-radius: 8px; background: var(--surface-tint-red); }
 .dr-change-icon { width: 18px; height: 18px; flex: none; display: grid; place-content: center; border-radius: 50%; background: var(--red); color: var(--text-on-primary); font-family: var(--font-display); font-weight: 800; font-size: 11px; }
 .dr-change-title { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: 0.1em; color: var(--red); }
 .dr-change p { margin: 4px 0 0; font-size: 9.8px; line-height: 1.55; color: var(--text-secondary); }
 .dr-change p strong { color: var(--text-primary); }
+.dr-change-list { margin: 6px 0 2px; padding: 0; list-style: none; display: grid; gap: 3px; }
+.dr-change-list li { display: flex; justify-content: space-between; gap: 12px; font-size: 9.8px; line-height: 1.45; padding: 3px 0; border-bottom: 1px dashed var(--surface-tint-red); color: var(--text-secondary); }
+.dr-change-list li:last-child { border-bottom: none; }
+.dr-change-list li strong { color: var(--text-primary); font-weight: 600; }
+.dr-change-list li span { flex: none; font-variant-numeric: tabular-nums; }
+.dr-suggest { margin-top: 12px; padding: 11px 16px 12px; border: 1px solid var(--surface-tint-navy); border-left: 4px solid var(--navy); border-radius: 8px; background: var(--surface-tint-navy); }
+.dr-suggest-title { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: 0.1em; color: var(--navy); }
+.dr-suggest ul { margin: 6px 0 0; padding-left: 16px; display: grid; gap: 4px; }
+.dr-suggest li { font-size: 9.8px; line-height: 1.5; color: var(--text-secondary); }
 
 /* Section 05 */
 .dr-vsum { margin-top: 14px; }
@@ -289,3 +321,11 @@
   .dr-page { page: letter-page; }
   .dr-doc { display: block; }
 }
+
+/* Numbers centred in their columns, headings included (owner's request): Fund Performance (1Y / 3Y / 5Y),
+   Overview Holding (Invested, Current, Profit — fund name and WT % unchanged), Portfolio Return vs Benchmark
+   Return (every number column) and Risk Measurement (Portfolio, Benchmark). */
+.dr-perf th.num, .dr-perf td.num,
+.dr-ret th.num, .dr-ret td.num,
+.dr-risk th.num, .dr-risk td.num { text-align: center; }
+.dr-holdings tr > .num:nth-child(n+3):nth-child(-n+5) { text-align: center; }
