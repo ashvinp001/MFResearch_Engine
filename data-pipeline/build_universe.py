@@ -4,8 +4,10 @@ Usage:
     python data-pipeline/build_universe.py                                   # download today's files
     python data-pipeline/build_universe.py --file NAVOpen.txt --master SchemeData.csv   # saved copies
 
-Input:  AMFI daily NAV file (primary) + AMFI Scheme Master (fills blank Plan/Option columns), and the
-        previous lists in data/schemes/ (so a scheme that disappears is kept, marked inactive).
+Input:  AMFI daily NAV file (primary) + AMFI Scheme Master (fills blank Plan/Option columns), PulseDB's plan /
+        option per scheme code (only for schemes BOTH AMFI files leave without a plan or option —
+        universe_rules.pulse_plan_fill), and the previous lists in data/schemes/ (so a scheme that disappears is
+        kept, marked inactive).
 Output: data/schemes/{regular,direct,etf}.json — the website's mapping lists (scheme_lists.py) —
         uploaded to Supabase too (schemes/…), with the run's report (reports/universe-latest.json and
         reports/universe/<AMFI date>.json: counts, every excluded code with its reason, warnings).
@@ -36,7 +38,9 @@ import settings  # noqa: E402
 from amfi_source import download, parse_nav_file, parse_scheme_master  # noqa: E402
 from scheme_lists import LISTS_DIR, ListError, check, read_lists, upload_lists, write_lists  # noqa: E402
 from supabase_storage import StorageClient, StorageError  # noqa: E402
-from universe_rules import NAME_SPECIAL_RE, Excluded, Included, classify, is_valid_isin, plan_option_from_nav_name  # noqa: E402
+from universe_rules import (  # noqa: E402
+    NAME_SPECIAL_RE, Excluded, Included, classify, is_valid_isin, plan_option_from_nav_name, pulse_plan_fill,
+)
 
 ACTIVE_WINDOW_DAYS = 30
 
@@ -50,10 +54,15 @@ def _letters(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def resolve(rows, master) -> tuple[list, list, list]:
+def resolve(rows, master, pulse: dict | None = None) -> tuple[list, list, list]:
     """Classify every row, then the second pass (see the module docstring and the comments below).
+    pulse: PulseDB's rows by scheme code (plan_name / option_name), used only for schemes AMFI states no plan / option.
     Returns (included, excluded, warnings)."""
     verdicts = {row.scheme_code: classify(row, master.get(row.scheme_code)) for row in rows}
+    for row in rows:
+        filled = pulse_plan_fill(row, verdicts[row.scheme_code], (pulse or {}).get(row.scheme_code))
+        if filled:
+            verdicts[row.scheme_code] = filled
     by_code = {row.scheme_code: row for row in rows}
     as_of = max(row.nav_date for row in rows) if rows else None
     live = lambda code: (as_of - by_code[code].nav_date).days <= ACTIVE_WINDOW_DAYS  # noqa: E731
@@ -75,7 +84,8 @@ def resolve(rows, master) -> tuple[list, list, list]:
         if key not in plain and len(codes) == 1:
             verdicts[codes[0]] = verdicts[codes[0]].variant_of
 
-    # Master-filled lines must not duplicate a fund/plan that already has a printed Growth line.
+    # Master- or Pulse-filled lines must not duplicate a fund/plan that already has a printed Growth line (a Pulse-filled
+    # line also gives way to a Master-filled one).
     sources = collections.defaultdict(lambda: collections.defaultdict(list))
     for code, verdict in verdicts.items():
         if isinstance(verdict, Included) and verdict.plan != "ETF":
@@ -85,6 +95,12 @@ def resolve(rows, master) -> tuple[list, list, list]:
         if by_source.get("daily") and by_source.get("master"):
             for code in by_source["master"]:
                 verdicts[code] = Excluded(f"duplicate: the fund already has a printed {plan} Growth line")
+        if (by_source.get("daily") or by_source.get("master")) and by_source.get("pulse"):
+            for code in by_source["pulse"]:
+                verdicts[code] = Excluded(f"duplicate: the fund already has an AMFI-stated {plan} Growth line")
+        if len(by_source.get("pulse", [])) > 1 and not (by_source.get("daily") or by_source.get("master")):
+            names = ", ".join(str(c) for c in sorted(by_source["pulse"]))
+            warnings.append(f"{key[1]} ({key[0]}): {len(by_source['pulse'])} {plan} Growth lines filled from PulseDB — all kept: {names}")
         printed = [code for code in by_source.get("daily", []) if live(code)]
         if len(printed) > 1:
             # Several LIVE printed Growth lines for one fund and plan. The Scheme Master's fuller
@@ -130,12 +146,12 @@ def resolve(rows, master) -> tuple[list, list, list]:
         (included if isinstance(verdict, Included) else excluded).append((row, verdict))
     return included, excluded, warnings
 
-def build(text: str, master_text: str | None, previous: list[dict]) -> tuple[list[dict], dict]:
+def build(text: str, master_text: str | None, previous: list[dict], pulse: dict | None = None) -> tuple[list[dict], dict]:
     """-> (schemes for the lists, the run report). Pure: reads nothing else, writes nothing."""
     rows = parse_nav_file(text)
     master = parse_scheme_master(master_text) if master_text else {}
     data_as_of = max(row.nav_date for row in rows)
-    included_rows, excluded_rows, warnings = resolve(rows, master)
+    included_rows, excluded_rows, warnings = resolve(rows, master, pulse)
 
     schemes = []
     for row, verdict in included_rows:
@@ -160,6 +176,8 @@ def build(text: str, master_text: str | None, previous: list[dict]) -> tuple[lis
         "inUniverse": len(schemes), "active": sum(s["active"] for s in schemes),
         "carriedInactive": len(carried), "excluded": len(excluded_rows),
         "plansFromSchemeMaster": sum(1 for _, v in included_rows if v.source == "master"),
+        "plansFromPulse": [{"schemeCode": r.scheme_code, "schemeName": r.scheme_name, "plan": v.plan}
+                           for r, v in included_rows if v.source == "pulse"],
         "byAssetClassAndPlan": {f"{a} / {p}": n for (a, p), n in sorted(collections.Counter(
             (s["assetClass"], s["plan"]) for s in schemes).items())},
         "excludedByReason": dict(collections.Counter(_reason_group(v.reason) for _, v in excluded_rows).most_common()),
@@ -190,9 +208,23 @@ def print_summary(report: dict) -> None:
             print("  " + line)
 
 
-def refresh_lists(client: StorageClient, text: str, master_text: str | None, verbose: bool = True) -> tuple[list[dict], dict]:
+def pulse_plans(config: dict) -> tuple[dict | None, str | None]:
+    """PulseDB's plan / option per scheme code (mf/nav_bm, last dates merged) → ({code: row}, None), or (None, why)
+    when Pulse is not reachable — the lists are then built from AMFI alone, as before."""
+    try:
+        from collect_benchmarks import latest_live
+        from pulse_source import PulseClient
+        pulse = PulseClient(settings.get("PULSE_BASE_URL", config), settings.get("PULSE_PARTNER", config), settings.get("PULSE_KEY", config))
+        pulse.login()
+        _, rows, _ = latest_live(pulse, datetime.now(timezone.utc).date())
+        return {int(r["scheme_code"]): r for r in rows if str(r.get("scheme_code", "")).isdigit()}, None
+    except Exception as error:  # Pulse is a fallback only: never stop the AMFI build
+        return None, f"PulseDB not reachable — schemes AMFI states no plan / option for stay out ({error.__class__.__name__})"
+
+
+def refresh_lists(client: StorageClient, text: str, master_text: str | None, verbose: bool = True, pulse: dict | None = None) -> tuple[list[dict], dict]:
     """Build, check, write data/schemes/ and upload the lists and the run report. Raises on any failure."""
-    schemes, report = build(text, master_text, read_lists(LISTS_DIR) if (LISTS_DIR / "regular.json").exists() else [])
+    schemes, report = build(text, master_text, read_lists(LISTS_DIR) if (LISTS_DIR / "regular.json").exists() else [], pulse)
     check(schemes)
     if verbose:
         print_summary(report)
@@ -212,8 +244,11 @@ def main() -> int:
     read = lambda path: path.read_text(encoding="utf-8", errors="replace")  # noqa: E731
     text = read(args.file) if args.file else download(settings.get("AMFI_NAV_URL", config))
     master_text = read(args.master) if args.master else download(settings.get("AMFI_SCHEME_MASTER_URL", config))
+    pulse, pulse_note = pulse_plans(config)
+    if pulse_note:
+        print("WARNING " + pulse_note)
     try:
-        _, report = refresh_lists(StorageClient(settings.supabase(config)), text, master_text)
+        _, report = refresh_lists(StorageClient(settings.supabase(config)), text, master_text, pulse=pulse)
     except (ListError, StorageError, settings.SettingsError) as error:
         print(f"\nERROR: {error}", file=sys.stderr)
         return 1

@@ -29,6 +29,7 @@ import { lastCompletedMonthEnd, monthEnds, riskMetrics } from "../analytics/risk
 import { isValidIsin } from "../identity/isin.js";
 import { toPaise } from "../cas/parse-values.js";
 import { portfolioXirr } from "./xirr.js";
+import { indexFamily, isIndexFund } from "../index-funds.js";
 
 const pct = (ratio) => (ratio === null || ratio === undefined || !Number.isFinite(ratio) ? null : ratio * 100);
 
@@ -37,14 +38,55 @@ export function assetGroup(scheme, name = "") {
   const text = `${scheme.category} ${scheme.schemeName} ${name}`.toLowerCase();
   // AMFI's Hybrid class (incl. arbitrage and multi-asset funds that hold some gold) is its own group.
   if (scheme.assetClass === "Hybrid" || (scheme.assetClass === "Other" && /hybrid/i.test(scheme.category ?? ""))) return "hybrid";
-  if (/\bgold\b|\bsilver\b|precious\s*metal/.test(text)) return "goldSilver";
+  // Gold / silver itself — not gold-MINING companies, which are equity ("DSP World Gold Mining Overseas Equity FoF").
+  if (/\bgold\b|\bsilver\b|precious\s*metal/.test(text) && !/(gold|silver)\s*min(ing|ers?)\b/.test(text)) return "goldSilver";
+  // An index fund is what its index is (index-funds.js): equity, debt or hybrid ("NIFTY LargeMidcap 250 Plus G-Sec
+  // 70:30" is hybrid, not debt).
+  if (isIndexFund(scheme)) return indexFamily({ category: scheme.category, name: `${scheme.schemeName ?? ""} ${name}` }).kind;
   if (scheme.assetClass === "Equity") return "equity";
   if (scheme.assetClass === "Debt") return "debt";
   if (scheme.assetClass === "Other") {
-    if (/\bgilt\b|g[\s-]*sec|\bsdl\b|\bbond\b|\bdebt\b|t[\s-]*bill|treasury|liquid|overnight|money\s*market|crisil\s*ibx|target\s*maturity|bharat\s*bond|income|arbitrage/.test(text)) return "debt";
-    if (/index funds|equity etf|other etfs|fof overseas|nifty|sensex|equity/.test(text) && !/fof domestic/.test(scheme.category.toLowerCase())) return "equity";
+    const category = (scheme.category ?? "").toLowerCase();
+    // Funds of funds (domestic and overseas) and overseas ETFs by what their name says they hold; an overseas one the
+    // name cannot place is equity (overseas FoFs are equity unless they say bonds / treasury / debt).
+    if (/fof domestic|fof overseas|etfs investing overseas/.test(category)) return fofGroup(text) ?? (/overseas/.test(category) ? "equity" : null);
+    if (/\bgilt\b|\bg[\s-]*sec\b|\bsdl\b|\bbond\b|\bdebt\b|\bt[\s-]*bills?\b|treasury|liquid|overnight|money\s*market|crisil\s*ibx|target\s*maturity|bharat\s*bond|arbitrage/.test(text)) return "debt";
+    if (/\bincome\b/.test(text) && !/\bequity\b/.test(text)) return "debt";   // "Equity Income" is an equity fund
+    if (/index funds|equity etf|other etfs|nifty|sensex|equity/.test(text)) return "equity";
   }
-  return null; // solution-oriented, domestic fund of funds: needs the fund's holdings to split
+  return null; // solution-oriented funds, or a fund of funds whose name does not say: decided by its holdings (groupFromMix)
+}
+
+/**
+ * A fund of funds (domestic or overseas) by what its name says it holds ("ICICI Prudential Diversified Equity All Cap
+ * Active FOF" → equity); null when the name does not tell (then its holdings decide — groupFromMix). Gold / silver FoFs
+ * are caught before this. Mixed names (multi-asset, balanced, hybrid) are hybrid; debt / bond / treasury names are debt;
+ * "income" is debt only without "equity" ("Global Equity Income" is equity).
+ */
+function fofGroup(text) {
+  if (/multi[\s-]*asset|hybrid|balanced|asset\s*allocation|dynamic\s*asset|\bblend/.test(text)) return "hybrid";
+  if (/\bdebt\b|\bbond\b|\bgilt\b|\bg[\s-]*sec\b|treasury|liquid|money\s*market|duration|target\s*maturity|\bsdl\b|arbitrage/.test(text)) return "debt";
+  if (/\bincome\b/.test(text) && !/\bequity\b/.test(text)) return "debt";
+  if (/\bequity\b|all\s*cap|flexi|multi\s*cap|large\s*(&|and)?\s*mid|large\s*cap|mid\s*cap|small\s*cap|\bnifty\b|\bsensex\b|\bindex\b/.test(text)) return "equity";
+  // A FoF of equity ETFs / indices (gold, silver and bond ETFs are caught above): sector, factor, BSE indices, and
+  // overseas equity (counted as equity in the report, as in the allocation's foreign-equity rule).
+  if (/\betfs?\b|\bbse\b|sector|factor|bharat\s*22|nasdaq|s\s*&\s*p|hang\s*seng|\bfang\b|global|international|overseas|\bworld\b|\bus\b/.test(text)) return "equity";
+  return null;
+}
+
+/**
+ * Report group from a fund's look-through holdings mix ({ equity, debt, goldSilver, other } in %): the asset type
+ * with 65% or more (the SEBI line for "predominantly"), otherwise hybrid. null without a mix.
+ */
+export function groupFromMix(mix) {
+  if (!mix) return null;
+  const total = (mix.equity ?? 0) + (mix.debt ?? 0) + (mix.goldSilver ?? 0) + (mix.other ?? 0);
+  if (!(total > 0)) return null;
+  const share = (k) => ((mix[k] ?? 0) / total) * 100;
+  if (share("equity") >= 65) return "equity";
+  if (share("debt") >= 65) return "debt";
+  if (share("goldSilver") >= 65) return "goldSilver";
+  return "hybrid";
 }
 
 /**
@@ -52,6 +94,23 @@ export function assetGroup(scheme, name = "") {
  * the plain return since its first NAV (never annualised, E1). Used for the client's funds and for
  * funds the advisor adds to the Recommended Portfolio.
  */
+// Report names for the blends we rebuild ourselves (benchmark codes SB…; owner, 30-Oct-2026): the category's name
+// instead of the list of component indices. The figures are the blend's own.
+// Matched on the AMFI category, and on the name for their funds of funds ("… Dynamic Asset Allocation Active FOF",
+// "… Multi-Asset Omni FoF", filed by AMFI as FoF Domestic).
+const BLEND_REPORT_NAME = [
+  [/balanced\s+advantage|dynamic\s+asset\s+allocation/i, "Hybrid: Dynamic Asset Allocation"],
+  [/multi[\s-]*asset/i, "Hybrid: Multi Asset Allocation"],
+];
+
+/** A fund's benchmark as named in the reports: a BAF / Multi Asset blend by its category, else the index name. */
+export function benchmarkDisplayName(scheme, bench) {
+  const name = bench?.name ?? bench?.code ?? null;
+  if (!String(bench?.code ?? "").startsWith("SB")) return name;
+  const text = `${scheme?.category ?? ""} ${scheme?.schemeName ?? ""}`;
+  return BLEND_REPORT_NAME.find(([pattern]) => pattern.test(text))?.[1] ?? name;
+}
+
 export function fundInfo(scheme, series, name = "", bench = null) {
   const anchor = anchorNav(series);
   const r = (period) => pct(trailingReturn(series, period, anchor));
@@ -64,7 +123,7 @@ export function fundInfo(scheme, series, name = "", bench = null) {
     plan: scheme.plan ?? null,   // Regular | Direct | ETF (AMFI list)
     assetClass: assetGroup(scheme, name),
     category: scheme.category,
-    benchmark: bAnchor ? bench.name ?? bench.code : null,
+    benchmark: bAnchor ? benchmarkDisplayName(scheme, bench) : null,
     benchmarkCode: bAnchor ? bench.code : null,
     navDate: anchor?.date ?? null,
     returns: { r1y, r3y: r({ years: 3 }), r5y: r({ years: 5 }) },
@@ -115,6 +174,7 @@ export function buildFundData({ portfolio, schemeMap, histories, benchmarks = {}
   const ownCoverage = covered(members.filter((m) => m.bench?.series && T && navOn(m.bench.series, T, "previous")));
   const mode = ownCoverage >= PORTFOLIO_ANALYTICS.minValueCoverage || !market?.series ? "own" : "market";
   const benchOf = (m) => (mode === "market" ? market : m.bench);
+  const benchName = (m) => (mode === "market" ? market.name ?? market.code : benchmarkDisplayName(m.scheme, m.bench));
   const legs = (set, dates) => set.map((m) => {
     const b = benchOf(m)?.series;
     if (b && dates.every((d) => navOn(b, d, "previous"))) {
@@ -139,7 +199,7 @@ export function buildFundData({ portfolio, schemeMap, histories, benchmarks = {}
       benchmarkCoverage = benchCoverage(ls);
       if (benchmarkCoverage >= PORTFOLIO_ANALYTICS.minValueCoverage) {
         bench = annualise(legValue(ls, T) / legValue(ls, start));
-        ls.filter((l) => l.real).forEach((l) => usedNames.add(benchOf(l.m).name ?? benchOf(l.m).code));
+        ls.filter((l) => l.real).forEach((l) => usedNames.add(benchName(l.m)));
       }
     }
     return { period: key, portfolio: pct(value), benchmark: pct(bench), coverage, benchmarkCoverage };
@@ -162,7 +222,7 @@ export function buildFundData({ portfolio, schemeMap, histories, benchmarks = {}
       const benchmarkCagr3y = withBench ? (legValue(ls, T) / legValue(ls, start3y)) ** (365 / daysBetween(start3y, T)) - 1 : null;
       const m = riskMetrics({ monthly, cagr3y, benchmarkMonthly, benchmarkCagr3y });
       const bm = withBench ? riskMetrics({ monthly: benchmarkMonthly, cagr3y: benchmarkCagr3y }) : null;
-      if (withBench) ls.filter((l) => l.real).forEach((l) => usedNames.add(benchOf(l.m).name ?? benchOf(l.m).code));
+      if (withBench) ls.filter((l) => l.real).forEach((l) => usedNames.add(benchName(l.m)));
       if (m) {
         risk = {
           stdDev: pct(m.stdDev), sharpe: m.sharpe, sortino: m.sortino, alpha: pct(m.alpha), beta: m.beta,

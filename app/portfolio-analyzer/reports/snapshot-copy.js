@@ -27,7 +27,7 @@ export function suggestedStrategy(snapshot) {
   if (c?.goldSilver > 0) roles.push("a gold/silver hedge");
   const roleText = roles.length ? ` — ${roles.length > 1 ? `${roles.slice(0, -1).join(", ")} and ${roles.at(-1)}` : roles[0]}` : "";
   return `A diversified allocation across ${snapshot.fundCount} funds and ${snapshot.amcCount} fund houses${roleText}. ` +
-    `Read from the uploaded CAS as on ${formatSnapshotDate(snapshot.asOf)}.`;
+    `As per the Consolidated Account Statement as on ${formatSnapshotDate(snapshot.asOf)}.`;
 }
 
 export function suggestedObservations(snapshot, portfolio) {
@@ -76,7 +76,7 @@ export function sourceNote(snapshot) {
     ? `Trailing returns and risk ratios (Alpha, Beta, Std Dev, Sharpe) are computed from month-end NAV history${snapshot.benchmarkName ? `, benchmarked to the ${benchmarkPhrase(snapshot.benchmarkName)}` : " (the benchmark comparison is shown when funds with a verified benchmark hold at least 80% of the value)"}` +
       (snapshot.coverage ? `; fund coverage ${snapshot.coverage.covered}/${snapshot.coverage.total}` : "") +
       ". Market-cap and sector splits are modelled estimates. "
-    : "Composition, sector, market-cap, trailing-return and risk figures will appear once fund and NAV data is connected. ";
-  return "Holdings, invested value, current value and AMC split are read from the uploaded CAS. " + analytics +
+    : "Composition, sector, market-cap, return and risk figures are shown where sufficient fund data is available. ";
+  return "Holdings, invested value, current value and AMC split are as per the Consolidated Account Statement. " + analytics +
     `Mutual fund investments are subject to market risks; read all scheme related documents carefully. Prepared via Prosperr Insights. Data as on ${date}.`;
 }

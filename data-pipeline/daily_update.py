@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import settings  # noqa: E402
 from amfi_source import AmfiFormatError, download, nav_history_url, parse_nav_file, parse_nav_history  # noqa: E402
-from build_universe import build, refresh_lists  # noqa: E402
+from build_universe import build, pulse_plans, refresh_lists  # noqa: E402
 from collect_nav_history import MANIFEST_FIELDS, MIN_INTERVAL_SECONDS, REPORT_PATH, Pacer, collect_one  # noqa: E402
 from nav_history import (  # noqa: E402
     HISTORY_FROM, MANIFEST_PATH, SCHEMA_VERSION, SOURCE, HistoryRejected, from_parquet, merge_daily, object_path,
@@ -125,14 +125,16 @@ def main() -> int:
         # 1. fund lists
         text = download(settings.get("AMFI_NAV_URL", config))
         master_text = download(settings.get("AMFI_SCHEME_MASTER_URL", config))
+        pulse, pulse_note = pulse_plans(config)   # only for schemes AMFI states no plan / option for
         if args.dry_run:
-            schemes, universe = build(text, master_text, read_lists(LISTS_DIR))
+            schemes, universe = build(text, master_text, read_lists(LISTS_DIR), pulse)
             check(schemes)
         else:
-            schemes, universe = refresh_lists(client, text, master_text, verbose=False)
+            schemes, universe = refresh_lists(client, text, master_text, verbose=False, pulse=pulse)
         as_of = date.fromisoformat(universe["dataAsOf"])
         by_code = {s["schemeCode"]: s for s in schemes}
-        print(f"Fund lists: {universe['inUniverse']} schemes (active {universe['active']}) | AMFI data as of {as_of}")
+        print(f"Fund lists: {universe['inUniverse']} schemes (active {universe['active']}) | AMFI data as of {as_of} | "
+              f"plan / option from PulseDB: {len(universe['plansFromPulse'])}" + (f" | WARNING {pulse_note}" if pulse_note else ""))
 
         # 2. new NAVs for stored schemes
         stored = {e["schemeCode"]: e for e in manifest["files"]}

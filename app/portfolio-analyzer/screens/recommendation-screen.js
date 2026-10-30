@@ -123,7 +123,7 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
         gain?.gainPct === null || gain?.gainPct === undefined ? DASH : formatSignedPct(gain.gainPct),
         gain ? h("span", { class: "rec-metric-sub" }, formatSignedInr(gain.gain, { whole: true })) : null),
       toggle, bulb);   // the bulb sits in the row's top-right corner (CSS), outside the column grid
-    return { element, plan, key };
+    return { element, plan, key, value: Number(holding.marketValue) || 0 };   // value: current value, as on the row
   });
 
   // Toolbar above the list: group by plan (Regular first, then Direct, then ETFs; off = the statement's own
@@ -159,6 +159,19 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
     unratedToggle.title = n ? "Show only the funds that still need Invest, Hold or Sell" : "Every fund has a recommendation";
   }
 
+  // Group heading: plan, number of funds and their total current value (share of the whole portfolio). The total
+  // always covers every fund of that plan, also while "Funds to rate" shows only some of them.
+  const portfolioValue = rows.reduce((sum, row) => sum + row.value, 0);
+  function planHeading(plan, visible) {
+    const all = rows.filter((row) => row.plan === plan);
+    const total = all.reduce((sum, row) => sum + row.value, 0);
+    const count = visible.length === all.length ? `${all.length} fund${all.length > 1 ? "s" : ""}` : `${visible.length} of ${all.length} funds`;
+    return h("div", { class: "rec-plan-group" },
+      h("span", {}, `${PLAN_HEADING[plan]} · ${count}`),
+      h("span", { class: "rec-plan-total" }, h("strong", { class: "ds-num" }, formatInr(total, { whole: true })),
+        portfolioValue ? ` · ${((total / portfolioValue) * 100).toFixed(1)}% of portfolio` : ""));
+  }
+
   function renderRows() {
     const grouped = Boolean(store.state.groupByPlan);
     planToggle.setAttribute("aria-pressed", String(grouped));
@@ -171,7 +184,7 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
     rowsSlot.replaceChildren(...PLAN_ORDER.flatMap((plan) => {
       const members = visible.filter((row) => row.plan === plan);
       return members.length
-        ? [h("div", { class: "rec-plan-group" }, `${PLAN_HEADING[plan]} · ${members.length} fund${members.length > 1 ? "s" : ""}`), ...members.map((row) => row.element)]
+        ? [planHeading(plan, members), ...members.map((row) => row.element)]
         : [];
     }));
   }

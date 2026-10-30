@@ -10,6 +10,9 @@ import {
   buildSnapshot, buildDetailedReport, buildReportProfile, diversificationStatus, categoryFromText,
   buildSchemeMap, mapHoldings, UNMATCHED_REASON, revalueAtLatestNav, VALUATION_REASON, VALUATION_SOURCE, classifyFund, FUND_CATEGORY,
   autoRecommend, gradeFund, engineOf, creditQuality, isSectorPassive, fundOverlap,
+  RETURN_VIEW, returnColumns, columnReturn, returnsTable,
+  scoreCategory, backtestCategory, fundMeasures, resolveSettings, quartileOf,
+  scoreIndexCategory, indexFundMeasures, indexFamily, indexCategoryLabel, isIndexFund, TRACKED_INDICES,
 } from "../calculation-engine/index.js";
 import { formatPaise, multiplyToPaise } from "../calculation-engine/portfolio-analyzer/revalue.js";
 import { daysBetween, navOn, navSeries, periodStart, trailingReturn, xirr } from "../calculation-engine/analytics/returns.js";
@@ -17,7 +20,7 @@ import { holdingCashflows, portfolioXirr, XIRR_EXCLUSION } from "../calculation-
 import { buildAllocation, normalisedHoldings, withAllocation } from "../calculation-engine/portfolio-analyzer/allocation.js";
 import { returnNotes } from "../calculation-engine/portfolio-analyzer/return-notes.js";
 import { lastCompletedMonthEnd, monthEnds, riskMetrics } from "../calculation-engine/analytics/risk.js";
-import { assetGroup, buildFundData } from "../calculation-engine/portfolio-analyzer/portfolio-performance.js";
+import { assetGroup, benchmarkDisplayName, buildFundData, groupFromMix } from "../calculation-engine/portfolio-analyzer/portfolio-performance.js";
 import { createHolding, createPortfolio } from "../calculation-engine/model/portfolio.schema.js";
 import { parsePrintedDate, parsePrintedNumber, toPaise } from "../calculation-engine/cas/parse-values.js";
 import { detectFormat } from "../calculation-engine/cas/detect-format.js";
@@ -72,6 +75,17 @@ test("ISIN check digit", () => {
 // ---------- CAMS / KFintech ----------
 
 test("CAMS: detected as CAMS_KFINTECH", () => eq(detectFormat(camsDoc), CAS_FORMAT.CAMS_KFINTECH));
+test("CAMS: one scheme with years of SIPs — Closing Unit Balance only on page 5 — is still CAMS_KFINTECH", () => {
+  const row = (text) => [[40, text]];
+  const filler = (n) => Array.from({ length: 30 }, (_, i) => row(`15-Jan-20${10 + n} Purchase - Systematic - Instalment ${n * 30 + i} 2,000.00 17.166 116.5102 ${i}.000`));
+  const long = doc([
+    [row("Consolidated Account Statement"), row("Folio No: 14364484 / 0 PAN: ABCDE1234F"), row("Opening Unit Balance: 0.000"), ...filler(0)],
+    filler(1), filler(2), filler(3),
+    [...filler(4), row("Closing Unit Balance: 2,931.402 NAV on 24-Oct-2026: INR 319.5329")],
+  ]);
+  eq(detectFormat(long), CAS_FORMAT.CAMS_KFINTECH);
+  eq(detectFormat(doc([[row("Consolidated Account Statement"), row("Some other document")]])), CAS_FORMAT.UNSUPPORTED);
+});
 
 test("CAMS: holding read exactly as printed", () => {
   const p = parseCasDocument(camsDoc, "cams.pdf");
@@ -491,6 +505,40 @@ test("Detailed report: a fund held in two folios counts as one fund in the Inves
   const m = buildDetailedReport({ portfolio: p, fundData: SAMPLE_FUND_DATA, verdicts });
   const distinct = new Set(p.holdings.filter((h) => h.status === "active").map((h) => h.isin)).size;
   eq(m.verdictSummary.hold.count, distinct);
+});
+test("Detailed report: Fund Performance lists a fund once when it is held in several folios (Holdings still lists each folio)", () => {
+  const p = samplePortfolio();
+  const first = p.holdings.find((h) => h.status === "active" && SAMPLE_FUND_DATA.funds[h.isin]?.assetClass === "equity");
+  p.holdings.push({ ...structuredClone(first), folio: "7654321" }, { ...structuredClone(first), folio: "1111111" });
+  const m = buildDetailedReport({ portfolio: p, fundData: SAMPLE_FUND_DATA, verdicts: {} });
+  const perf = m.performance.flatMap((g) => g.rows).filter((r) => r.isin === first.isin);
+  const held = m.holdings.groups.flatMap((g) => g.rows).filter((r) => r.isin === first.isin);
+  eq([perf.length, held.length], [1, 3]);
+  const isins = m.performance.flatMap((g) => g.rows.map((r) => r.isin));
+  eq(isins.length, new Set(isins).size, "no ISIN twice");
+});
+test("Detailed report: fund-wise market cap lists a scheme once — Regular + Direct + extra folio = one row, plan-neutral name", () => {
+  const p = samplePortfolio();
+  const fundData = structuredClone(SAMPLE_FUND_DATA);
+  const regular = p.holdings.find((h) => h.status === "active" && fundData.funds[h.isin]?.assetClass === "equity" && fundData.funds[h.isin]?.marketCap
+    && !/index|etf/i.test(`${fundData.funds[h.isin].category ?? ""} ${h.schemeName}`));
+  regular.schemeName = "Alpha Large Cap Fund - Regular Plan - Growth (Non-Demat)";
+  const direct = { ...structuredClone(regular), isin: "INF000Z01AA1", folio: "999", schemeName: "Alpha Large Cap Fund - Direct Plan - Growth (Demat)" };
+  fundData.funds[direct.isin] = { ...fundData.funds[regular.isin], plan: "Direct" };
+  p.holdings.push(direct, { ...structuredClone(regular), folio: "555" });
+  const m = buildDetailedReport({ portfolio: p, fundData, verdicts: {} });
+  const alpha = m.marketCapByFund.rows.filter((r) => /Alpha Large Cap/.test(r.name));
+  eq(alpha.map((r) => r.name), ["Alpha Large Cap Fund"]);
+  const perf = m.performance.flatMap((g) => g.rows).filter((r) => /Alpha Large Cap/.test(r.name));
+  eq(perf.length, 2, "Fund Performance keeps Regular and Direct apart");
+});
+test("Detailed report: Portfolio Overlap applies only with two or more different funds (one fund in two folios = one fund)", () => {
+  const many = buildDetailedReport({ portfolio: samplePortfolio(), fundData: SAMPLE_FUND_DATA, verdicts: {} });
+  const p = samplePortfolio();
+  const first = p.holdings.find((h) => h.status === "active");
+  p.holdings = [first, { ...structuredClone(first), folio: "7654321" }];
+  const one = buildDetailedReport({ portfolio: p, fundData: SAMPLE_FUND_DATA, verdicts: {} });
+  eq([many.overlapApplies, one.overlapApplies], [true, false]);
 });
 test("Detailed report: groups by asset class, alphabetical, totals exact", () => {
   const m = buildDetailedReport({ portfolio: samplePortfolio(), fundData: SAMPLE_FUND_DATA, verdicts: {} });
@@ -1361,12 +1409,56 @@ test("Detailed report: Portfolio Overlap — lower-triangle matrix (0–1), one 
   const o = m.overlap;
   eq(o.funds.length, 3);
   eq(o.funds.some((f) => f.isin === d.isin), false);
-  eq(o.matrix.map((r) => r.length), [1, 2, 3]);                          // lower triangle with the diagonal
-  eq(o.matrix.every((r, i) => r[i] === 1), true);
-  const at = (x, y) => { const i = o.funds.findIndex((f) => f.isin === x.isin), j = o.funds.findIndex((f) => f.isin === y.isin); return i > j ? o.matrix[i][j] : o.matrix[j][i]; };
+  const all = [...o.buckets.high, ...o.buckets.moderate, ...o.buckets.low];
+  const at = (x, y) => all.find((p) => [p.a, p.b].sort().join("|") === [x, y].map((h) => o.funds.find((f) => f.isin === h.isin).name).sort().join("|")).overlap;
   eq([at(a, b).toFixed(2), at(a, c).toFixed(2)], ["0.70", "0.00"]);
+  // closest overlap for every fund: a and b share one row; c has none above 10% → its own row
+  eq(o.closest.map((r) => (r.solo ? "solo" : r.overlap.toFixed(2))), ["0.70", "solo"]);
   eq(o.pairs.map((x) => x.overlap.toFixed(2)), ["0.70"]);
   eq(buildDetailedReport({ portfolio: p, fundData: SAMPLE_FUND_DATA, verdicts: {} }).overlap, null);   // no holdings data
+});
+
+test("Detailed report: Portfolio Overlap — every fund in the matrix (no cap), buckets with shared stocks, duplicates once", () => {
+  const p = samplePortfolio();
+  const active = p.holdings.filter((h) => h.status === "active");
+  const eqRows = (pairs) => ({ asOn: "2026-09", holdings: pairs.map(([isin, weight]) => ({ assetType: "equity", isin, name: `Stock ${isin}`, weight })) });
+  // 14 equity holdings (more than the old 12-fund cap)
+  const sample = Array.from({ length: 14 }, (_, i) => ({ ...structuredClone(active[0]), isin: `INFTEST${String(i).padStart(4, "0")}`, schemeName: `Test ${String.fromCharCode(65 + i)} Large Cap Fund - Direct Plan - Growth`, folio: `F${i}` }));
+  // the same scheme again in its Regular plan → one fund
+  sample.push({ ...structuredClone(sample[0]), isin: "INFTESTREG01", schemeName: "Test A Large Cap Fund - Regular Plan - Growth", folio: "F99" });
+  const portfolio = { ...p, holdings: sample };
+  const fundHoldings = Object.fromEntries(sample.map((h, i) => [h.isin, i === 1 ? eqRows([["S1", 40], ["S2", 30], ["S9", 30]])
+    : i === 2 ? eqRows([["S1", 30], ["X2", 70]]) : i < 14 && i > 2 ? eqRows([[`Z${i}`, 100]]) : eqRows([["S1", 40], ["S2", 30], ["S3", 30]])]));
+  const info = Object.fromEntries(sample.map((h) => [h.isin, { assetClass: "equity", category: "Large Cap Fund" }]));
+  const o = buildDetailedReport({ portfolio, fundData: { ...SAMPLE_FUND_DATA, funds: info }, verdicts: {}, fundHoldings }).overlap;
+  eq(o.funds.length, 14);                                                    // all funds; Regular + Direct of Test A once
+  eq(o.funds.filter((f) => /Test A/.test(f.name)).map((f) => f.name), ["Test A Large Cap Fund"]);   // plan-neutral name
+  const n = 14 * 13 / 2;
+  // every fund appears in the closest-overlap chart: 1 row for funds 1–3 (A↔B 70%, C closest to A or B at 30%), 11 solo
+  const inChart = new Set(o.closest.flatMap((r) => (r.solo ? [r.n] : [r.aN, r.bN])));
+  eq(inChart.size, 14);
+  eq(o.buckets.high.length + o.buckets.moderate.length + o.buckets.low.length, n);
+  const high = o.buckets.high[0];
+  eq([high.overlap.toFixed(2), high.band, high.shared], ["0.70", "high", ["Stock S1", "Stock S2"]]);
+  eq(o.buckets.moderate.map((x) => x.overlap.toFixed(2)), ["0.30", "0.30"]);
+  eq(o.buckets.low.every((x) => x.overlap < 0.25 && x.band === "low"), true);
+  eq(o.distinct.length, 11);                                                 // funds 4–14 share nothing with anyone
+});
+
+test("Detailed report: Portfolio Overlap — hybrid funds compared; FoFs, arbitrage, debt and gold funds left out", () => {
+  const p = samplePortfolio();
+  const base = p.holdings.filter((h) => h.status === "active")[0];
+  const mk = (isin, schemeName) => ({ ...structuredClone(base), isin, schemeName, folio: isin });
+  const sample = [mk("INFT0001", "Alpha Large Cap Fund - Direct Growth"), mk("INFT0002", "Beta Aggressive Hybrid Fund - Direct Growth"),
+    mk("INFT0003", "Gamma Diversified Equity All Cap Active FOF - Direct Growth"), mk("INFT0004", "Delta Arbitrage Fund - Direct Growth"),
+    mk("INFT0005", "Epsilon Gold ETF FOF - Direct Growth"), mk("INFT0006", "Zeta Corporate Bond Fund - Direct Growth")];
+  const stocks = { assetType: "equity", isin: "S1", name: "Stock S1", weight: 100 };
+  const fundHoldings = Object.fromEntries(sample.map((h) => [h.isin, { asOn: "2026-09", holdings: [stocks] }]));
+  const info = { INFT0001: ["equity", "Large Cap Fund"], INFT0002: ["hybrid", "Aggressive Hybrid Fund"], INFT0003: ["equity", "FoF Domestic"],
+    INFT0004: ["hybrid", "Arbitrage Fund"], INFT0005: ["goldSilver", "FoF Domestic"], INFT0006: ["debt", "Corporate Bond Fund"] };
+  const funds = Object.fromEntries(Object.entries(info).map(([isin, [assetClass, category]]) => [isin, { assetClass, category }]));
+  const o = buildDetailedReport({ portfolio: { ...p, holdings: sample }, fundData: { ...SAMPLE_FUND_DATA, funds }, verdicts: {}, fundHoldings }).overlap;
+  eq(o.funds.map((f) => f.isin).sort(), ["INFT0001", "INFT0002"]);
 });
 
 test("Report commentary: a Sell states only its real basis (weak fund / portfolio fit / advisor's own choice)", () => {
@@ -1392,6 +1484,214 @@ test("Detailed report: the logic's basis reaches a row only when the advisor kep
 test("Auto: legacy AMFI category and unknown asset class → REVIEW", () => {
   eq(recGrade("Income (legacy)", {}, { scheme: DEBT }).ruleId, "legacy-category");
   eq(engineOf(null), "unlisted");
+});
+
+// ---------- Fund Research returns (E5.1 worked examples) ----------
+const E51 = navSeries([
+  { date: "2023-07-07", nav: 100 }, { date: "2025-01-02", nav: 120 }, { date: "2025-12-31", nav: 138 }, { date: "2026-01-02", nav: 138 },
+  { date: "2026-06-01", nav: 148 }, { date: "2026-06-06", nav: 145 }, { date: "2026-06-30", nav: 152 }, { date: "2026-07-08", nav: 150 },
+]);
+const pct2 = (x) => (x === null ? null : Math.round(x * 10000) / 100);
+const colOf = (view, key) => returnColumns(view, "2026-07-08").find((c) => c.key === key);
+
+test("Research: E5.1 trailing 1M (simple, nearest-previous) and 3Y (CAGR on actual days)", () => {
+  eq(pct2(columnReturn(E51, colOf(RETURN_VIEW.TRAILING, "1M"), "2026-07-08")), 3.45);
+  eq(pct2(columnReturn(E51, colOf(RETURN_VIEW.TRAILING, "3Y"), "2026-07-08")), 14.44);
+  eq(columnReturn(E51, colOf(RETURN_VIEW.TRAILING, "5Y"), "2026-07-08"), null);   // no NAV that far back
+});
+
+test("Research: E5.1 monthly June 2026, annual 2025 (nearest-next start), YTD 2026", () => {
+  eq(pct2(columnReturn(E51, colOf(RETURN_VIEW.MONTHLY, "2026-06"), "2026-07-08")), 2.7);
+  eq(pct2(columnReturn(E51, colOf(RETURN_VIEW.ANNUAL, "2025"), "2026-07-08")), 15);
+  eq(pct2(columnReturn(E51, colOf(RETURN_VIEW.ANNUAL, "2026"), "2026-07-08")), 8.7);
+  eq(columnReturn(E51, colOf(RETURN_VIEW.ANNUAL, "2023"), "2026-07-08"), null);    // launched mid-2023: never a part year
+});
+
+test("Research: columns, category average leaves out funds without a figure, benchmark row", () => {
+  const monthly = returnColumns(RETURN_VIEW.MONTHLY, "2026-07-08");
+  eq([monthly.length, monthly[0].label, monthly[1].label, monthly.at(-1).label], [13, "MTD", "Jun 26", "Jul 25"]);
+  const annual = returnColumns(RETURN_VIEW.ANNUAL, "2026-07-08", { firstYear: 2024 });
+  eq(annual.map((c) => c.label), ["YTD 2026", "2025", "2024"]);
+  const young = navSeries([{ date: "2025-12-31", nav: 10 }, { date: "2026-01-02", nav: 10 }, { date: "2026-07-08", nav: 12 }]);
+  const t = returnsTable({ funds: [{ name: "A", series: E51 }, { name: "B", series: young }], benchmark: { name: "IDX", series: E51 }, view: RETURN_VIEW.ANNUAL, asOf: "2026-07-08", firstYear: 2025 });
+  eq([pct2(t.average.returns["2026"]), t.average.counts["2026"], pct2(t.average.returns["2025"]), t.average.counts["2025"]], [14.35, 2, 15, 1]);
+  eq([t.benchmark.name, pct2(t.benchmark.returns["2025"])], ["IDX", 15]);
+});
+
+// ---------- Fund Scorecard ----------
+const scDays = (from, to) => { const out = []; for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86400000) out.push(new Date(t).toISOString().slice(0, 10)); return out; };
+const scSynth = (from, to, g, amp = 0.03, phase = 0) => navSeries(scDays(from, to).map((date, i) => ({ date, nav: 10 * Math.exp((g * i) / 365) * (1 + amp * Math.sin(i / 45 + phase)) })));
+const SC_ASOF = "2026-10-26";
+const scFund = (code, g, extra = {}) => ({ code, name: `Fund ${code}`, series: scSynth("2015-01-01", SC_ASOF, g), aum: 5000, ...extra });
+const SC_BENCH = scSynth("2015-01-01", SC_ASOF, 0.10);
+
+test("Scorecard: E9 quartile formula (owner's ROUNDUP)", () => {
+  eq([1, 3, 4, 5, 6, 8, 9, 10].map((r) => quartileOf(r, 10)), [1, 1, 2, 2, 3, 3, 4, 4]);
+  eq([quartileOf(1, 1), quartileOf(null, 5), quartileOf(2, 0)], [1, null, null]);
+});
+
+test("Scorecard: better funds rank higher; percentiles run 0–100; quartiles by rank", () => {
+  const funds = [0.06, 0.08, 0.10, 0.12, 0.14, 0.16].map((g, i) => scFund(i + 1, g));
+  const r = scoreCategory({ funds, benchmark: SC_BENCH, asOf: SC_ASOF });
+  eq(r.categoryReason, null);
+  eq(r.rated.map((x) => x.code), [6, 5, 4, 3, 2, 1]);
+  eq([r.rated[0].measures.r3y.pct, r.rated[5].measures.r3y.pct], [100, 0]);
+  eq(r.rated.map((x) => x.quartile), [1, 1, 2, 3, 3, 4]);
+  eq(r.rated[0].measures.aum.pct, 50);   // equal AUM: every fund shares the middle position
+  eq(r.rated.every((x) => x.score >= 0 && x.score <= 100), true);
+});
+
+test("Scorecard: conditions — new fund, stale NAV, AUM below minimum / not published, NAV break → Not rated", () => {
+  const breakSeries = navSeries(scDays("2015-01-01", SC_ASOF).map((date, i) => ({ date, nav: (10 + i * 0.001) * (date >= "2024-06-03" ? 1.4 : 1) })));
+  const funds = [
+    ...[0.06, 0.08, 0.10, 0.12, 0.14].map((g, i) => scFund(i + 1, g)),
+    { code: 10, name: "New", series: scSynth("2024-02-01", SC_ASOF, 0.1), aum: 5000 },
+    { code: 11, name: "Stale", series: scSynth("2015-01-01", "2026-10-05", 0.1), aum: 5000 },
+    scFund(12, 0.1, { aum: 120 }),
+    scFund(13, 0.1, { aum: null }),
+    { code: 14, name: "Break", series: breakSeries, aum: 5000 },
+  ];
+  const r = scoreCategory({ funds, benchmark: SC_BENCH, asOf: SC_ASOF });
+  const why = Object.fromEntries(r.notRated.map((n) => [n.code, n.reason]));
+  eq([/New fund/.test(why[10]), /more than 7 days old/.test(why[11]), /below the minimum/.test(why[12]), /AUM not published/.test(why[13]), /NAV history break on 2024-06-03/.test(why[14])], [true, true, true, true, true]);
+  eq(r.rated.length, 5);
+});
+
+test("Scorecard: too few eligible funds → nobody is ranked", () => {
+  const r = scoreCategory({ funds: [scFund(1, 0.1), scFund(2, 0.12), scFund(3, 0.14, { aum: 10 })], benchmark: SC_BENCH, asOf: SC_ASOF });
+  eq([r.rated.length, /Only 2 funds meet the conditions/.test(r.categoryReason)], [0, true]);
+});
+
+test("Scorecard: a fund identical to its index — beta 1, capture 100/100, tracking error 0 (information ratio not defined)", () => {
+  const f = fundMeasures({ code: 1, series: SC_BENCH, aum: 1 }, { benchmark: SC_BENCH, asOf: SC_ASOF });
+  const r2 = (x) => Math.round(x * 100) / 100;
+  eq([r2(f.measures.beta), r2(f.measures.upCapture), r2(f.measures.downCapture), r2(f.measures.trackingError), f.measures.informationRatio, r2(f.measures.excess3y)], [1, 100, 100, 0, null, 0]);
+});
+
+// ---------- index funds (index-funds.js, research/index-scorecard.js) ----------
+test("Index funds: one classifier — family and asset group from the tracked index", () => {
+  const f = (name, benchmarkName = null, category = "Index Funds") => indexFamily({ category, name, benchmarkName }).family;
+  eq(f("UTI Nifty 50 Index Fund", "NIFTY 50 Index"), "broad");
+  eq(f("Motilal Oswal Nifty 200 Momentum 30 Index Fund", "NIFTY 200 Momentum 30 Index"), "factor");
+  eq(f("Motilal Oswal BSE Enhanced Value Index Fund", "BSE Enhanced Value Index"), "factor");
+  eq(f("Kotak Nifty Bank Index Fund", "NIFTY Bank Index"), "sector");
+  eq(f("Motilal Oswal S&P 500 Index Fund", "S&P 500 Index"), "international");
+  eq(f("Bandhan CRISIL IBX Gilt June 2027 Index Fund", "CCIL All Sovereign Bonds Index TRI"), "debt");
+  // two debt indices are debt; an equity index plus G-Sec is hybrid
+  eq(f("DSP Nifty SDL Plus G-Sec Sep 2027 50:50 Index Fund", "CCIL All Sovereign Bonds Index TRI"), "debt");
+  eq(f("HDFC Nifty LargeMidcap250 Plus 8-13 yr G-sec 70:30 Index Fund", "NIFTY LargeMidcap250 Plus 8-13 yr G-Sec 70:30 Index"), "hybrid");
+  eq(f("X Nifty 50 Index Fund", null, "Index Funds - Debt"), "debt");
+  eq([isIndexFund({ category: "Index Funds" }), isIndexFund({ category: "Index Funds - Equity" }), isIndexFund({ category: "Other ETFs" })], [true, true, false]);
+  eq(indexCategoryLabel({ category: "Index Funds", name: "UTI Nifty 50 Index Fund", benchmarkName: "NIFTY 50 Index" }), "Index Fund · NIFTY 50");
+  eq(indexCategoryLabel({ category: "Index Funds", name: "Bandhan CRISIL IBX Gilt 2027 Index Fund", benchmarkName: "CCIL All Sovereign Bonds Index TRI" }), "Index Fund · Debt index");
+  // the Portfolio Analyzer's report group comes from the same classifier (the 70:30 fund was "debt" before)
+  const group = (schemeName) => assetGroup({ assetClass: "Other", category: "Index Funds", schemeName });
+  eq([group("HDFC Nifty LargeMidcap250 Plus 8-13 yr G-sec 70:30 Index Fund"), group("Axis Nifty SDL September 2026 Debt Index Fund"), group("UTI Nifty 50 Index Fund")], ["hybrid", "debt", "equity"]);
+  eq(TRACKED_INDICES.every((t) => t.code && t.name && t.family), true);
+});
+
+test("Report benchmark names: BAF and Multi Asset blends by their category; other benchmarks unchanged", () => {
+  const baf = { category: "Balanced Advantage / Dynamic Asset Allocation" }, maaf = { category: "Multi Asset Allocation" };
+  eq(benchmarkDisplayName(baf, { code: "SBAB124", name: "NIFTY 50 50% + CRISIL Short Term Bond 50%" }), "Hybrid: Dynamic Asset Allocation");
+  eq(benchmarkDisplayName(maaf, { code: "SBAHB99", name: "BSE 200 65% + CRISIL Short Term Bond 20% + Gold 10% + Silver 5%" }), "Hybrid: Multi Asset Allocation");
+  eq(benchmarkDisplayName({ category: "Equity Savings" }, { code: "SBOHB30", name: "NIFTY 50 Arbitrage 75% + NIFTY 50 25%" }), "NIFTY 50 Arbitrage 75% + NIFTY 50 25%");
+  eq(benchmarkDisplayName(baf, { code: "AUB11", name: "CRISIL Hybrid 35+65 - Aggressive Fund Index" }), "CRISIL Hybrid 35+65 - Aggressive Fund Index");
+  eq(benchmarkDisplayName(baf, null), null);
+  // their funds of funds (AMFI: FoF Domestic) by name
+  eq(benchmarkDisplayName({ category: "FoF Domestic", schemeName: "ICICI Prudential Dynamic Asset Allocation Active FOF" }, { code: "SBAB124", name: "x" }), "Hybrid: Dynamic Asset Allocation");
+  eq(benchmarkDisplayName({ category: "FoF Domestic", schemeName: "Axis Multi-Asset Omni FoF" }, { code: "SBAHB10", name: "x" }), "Hybrid: Multi Asset Allocation");
+  eq(benchmarkDisplayName({ category: "Balanced Hybrid Fund", schemeName: "WhiteOak Capital Balanced Hybrid Fund" }, { code: "SBAB124", name: "NIFTY 50 50% + CRISIL Short Term Bond 50%" }), "NIFTY 50 50% + CRISIL Short Term Bond 50%");
+});
+
+test("Index scorecard: a fund identical to its index tracks perfectly; a costlier tracker ranks lower", () => {
+  const idx = scSynth("2015-01-01", SC_ASOF, 0.11);
+  // fund k: the index minus k% a year (cost drag) — tracking difference ≈ −k%, tracking error ≈ 0
+  const dragged = (k) => navSeries(idx.dates.map((date, i) => ({ date, nav: idx.navs[i] * Math.exp((-k / 100) * (i / 365)) })));
+  const perfect = indexFundMeasures({ code: 1, series: idx, aum: 1000, benchmarkSeries: idx }, { asOf: SC_ASOF });
+  const r4 = (x) => Math.round(x * 10000) / 10000;
+  eq([r4(perfect.measures.td1y), r4(perfect.measures.te1y), r4(perfect.measures.tdSpread)], [0, 0, 0]);
+  const funds = [0.1, 0.3, 0.5, 0.8, 1.2, 2].map((k, i) => ({ code: i + 1, name: `Tracker ${i + 1}`, series: dragged(k), aum: 1000, benchmarkSeries: idx }));
+  const card = scoreIndexCategory({ funds, asOf: SC_ASOF });
+  eq(card.kind, "index");
+  eq(card.rated.map((r) => r.code), [1, 2, 3, 4, 5, 6]);   // the cheapest tracker first
+  eq(Math.round(card.rated[0].measures.td1y.value * 1000) / 1000, -0.001);
+  // conditions: a fund under 1 year, a small fund, a fund without index history
+  const young = { code: 7, name: "Young", series: navSeries(idx.dates.slice(-200).map((date, i) => ({ date, nav: idx.navs[idx.dates.length - 200 + i] }))), aum: 1000, benchmarkSeries: idx };
+  const tiny = { code: 8, name: "Tiny", series: dragged(0.2), aum: 50, benchmarkSeries: idx };
+  const noIndex = { code: 9, name: "No index", series: dragged(0.2), aum: 1000, benchmarkSeries: null };
+  const reasons = Object.fromEntries(scoreIndexCategory({ funds: [...funds, young, tiny, noIndex], asOf: SC_ASOF }).notRated.map((n) => [n.code, n.reason]));
+  eq([/New fund/.test(reasons[7]), /below the minimum/.test(reasons[8]), /index's price history/.test(reasons[9])], [true, true, true]);
+  // too few funds tracking the index → nobody ranked
+  eq(scoreIndexCategory({ funds: funds.slice(0, 3), asOf: SC_ASOF }).categoryReason !== null, true);
+});
+
+test("Scorecard: max drawdown and recovery days on a crafted dip", () => {
+  // Flat 100, a fall to 75 on 2025-03-01 (−25%), back to 100 on 2025-05-01, then flat.
+  const series = navSeries(scDays("2015-01-01", SC_ASOF).map((date) => ({ date, nav: date >= "2025-03-01" && date < "2025-05-01" ? 75 : 100 + (date > "2025-05-01" ? 0.0001 : 0) })));
+  const f = fundMeasures({ code: 1, series, aum: 1 }, { benchmark: SC_BENCH, asOf: SC_ASOF });
+  eq([Math.round(f.measures.maxDrawdown * 1000) / 1000, f.measures.recoveryDays], [-0.25, 61]);
+});
+
+test("Scorecard: invalid owner settings fall back to the defaults as a whole", () => {
+  eq(resolveSettings({ weights: { returns: 100 }, conditions: {} }).custom, false);
+  const ok = resolveSettings({ weights: { returns: 30, riskAdjusted: 20, benchmark: 10, volatility: 10, downside: 10, consistency: 10, quality: 10 }, conditions: { minHistoryYears: 5, maxNavAgeDays: 7, minPeers: 5, minAumCr: 1000 } });
+  eq([ok.custom, ok.weights.returns, ok.conditions.minAumCr], [true, 30, 1000]);
+  eq(resolveSettings({ weights: ok.weights, conditions: { ...ok.conditions, minHistoryYears: 1 } }).custom, false);
+  eq(resolveSettings({ weights: ok.weights, conditions: { ...ok.conditions, minHistoryYears: 2 } }).custom, true);
+});
+
+test("Scorecard: model check rates the category 3 years back and measures each quartile since", () => {
+  const funds = [0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20].map((g, i) => scFund(i + 1, g));
+  const b = backtestCategory({ funds, benchmark: SC_BENCH, asOf: SC_ASOF });
+  eq([b.from, b.funds, b.quartiles.reduce((s, q) => s + q.funds, 0)], ["2023-10-26", 8, 8]);
+  eq(b.quartiles[0].avgReturn > b.quartiles[3].avgReturn, true);   // steady growth: the top quartile stayed ahead
+});
+
+test("Scorecard: minimum history 2 years — a 2½-year fund is rated, every fund measured over the same 24 months", () => {
+  const funds = [0.06, 0.08, 0.10, 0.12, 0.14].map((g, i) => scFund(i + 1, g));
+  funds.push({ code: 9, name: "Young", series: scSynth("2024-04-01", SC_ASOF, 0.15), aum: 5000 });
+  const settings = { weights: { returns: 20, riskAdjusted: 20, benchmark: 10, volatility: 15, downside: 15, consistency: 10, quality: 10 }, conditions: { minHistoryYears: 2, maxNavAgeDays: 7, minPeers: 5, minAumCr: 500 } };
+  const two = scoreCategory({ funds, benchmark: SC_BENCH, asOf: SC_ASOF, settings });
+  const three = scoreCategory({ funds, benchmark: SC_BENCH, asOf: SC_ASOF });
+  const young = two.rated.find((r) => r.code === 9);
+  eq([two.windowYears, three.windowYears, Boolean(young), three.rated.some((r) => r.code === 9)], [2, 3, true, false]);
+  eq([young.measures.sharpe.value !== null, young.measures.r3y.value, two.pillars.find((p) => p.key === "downside").measures[0].label], [true, null, "Max drawdown (2Y)"]);
+});
+
+test("Asset group: domestic funds of funds by name — equity / debt / hybrid / gold — and whole-word G-Sec", () => {
+  const fof = (schemeName) => assetGroup({ assetClass: "Other", category: "FoF Domestic", schemeName });
+  eq([
+    fof("ICICI Prudential Diversified Equity All Cap Active FOF"),
+    fof("Mirae Asset Nifty 100 ESG Sector Leaders Fund of Fund"),   // "esG SECtor" must not read as G-Sec
+    fof("Motilal Oswal Nasdaq 100 Fund of Fund"),
+    fof("Kotak Multi Factor Passive FOF"),
+    fof("BHARAT Bond FOF- April 2031"),
+    fof("Motilal Oswal 5 Year G-Sec Fund of Fund"),
+    fof("Kotak Income Plus Arbitrage Omni FOF"),
+    fof("HDFC Multi-Asset Active FOF"),
+    fof("HDFC Gold ETF Fund of Fund"),
+  ], ["equity", "equity", "equity", "equity", "debt", "debt", "debt", "hybrid", "goldSilver"]);
+  eq(assetGroup({ assetClass: "Other", category: "Other ETFs", schemeName: "Mirae Asset Nifty 100 ESG Sector Leaders ETF" }), "equity");
+});
+
+test("Asset group: overseas funds of funds — equity unless bonds / treasury / debt; equity income and gold mining are equity", () => {
+  const ov = (schemeName, category = "FoF Overseas") => assetGroup({ assetClass: "Other", category, schemeName });
+  eq([
+    ov("Franklin U. S. Opportunities Equity Active Fund of Funds"),
+    ov("Invesco India - Invesco Global Equity Income Fund of Fund"),    // "income" with "equity" is not debt
+    ov("DSP World Gold Mining Overseas Equity Omni FoF"),                 // gold-mining shares are equity
+    ov("Kotak International REIT Overseas Equity Active FOF"),
+    ov("Mirae Asset NYSE FANG+ ETF", "ETFs investing overseas"),
+    ov("Aditya Birla Sun Life US Treasury 3-10 Year Bond ETFs Passive FOF"),
+    ov("Axis US Specific Treasury Dynamic Debt Passive FOF"),
+  ], ["equity", "equity", "equity", "equity", "equity", "debt", "debt"]);
+  eq(assetGroup({ assetClass: "Other", category: "FoF Domestic", schemeName: "Kotak Income Plus Arbitrage Omni FOF" }), "debt");
+});
+
+test("Asset group: an unplaced fund goes by its look-through holdings (65% rule), else hybrid", () => {
+  eq([groupFromMix({ equity: 92, debt: 8, goldSilver: 0, other: 0 }), groupFromMix({ equity: 10, debt: 85, goldSilver: 5, other: 0 }),
+      groupFromMix({ equity: 0, debt: 2, goldSilver: 98, other: 0 }), groupFromMix({ equity: 50, debt: 40, goldSilver: 10, other: 0 }), groupFromMix(null)],
+     ["equity", "debt", "goldSilver", "hybrid", null]);
 });
 
 // ---------- report ----------

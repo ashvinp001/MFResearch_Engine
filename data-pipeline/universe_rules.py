@@ -175,7 +175,8 @@ class Included:
     category: str
     plan: str     # Regular | Direct | ETF
     option: str   # Growth | ETF
-    source: str = "daily"   # 'daily' = AMFI daily file columns; 'master' = filled from the Scheme Master
+    source: str = "daily"   # 'daily' = AMFI daily file columns; 'master' = filled from the Scheme Master;
+                            # 'pulse' = AMFI states neither, filled from PulseDB (pulse_plan_fill)
 
 
 @dataclass(frozen=True)
@@ -308,6 +309,27 @@ def classify(row, master=None) -> Included | Excluded:
     if stated_plan and stated_plan.lower() != plan.lower():
         return Excluded(f"plan conflict: Plan column {plan_text!r}, option {option_text!r}")
     return Included(asset_class, category, plan, "Growth", source)
+
+
+# PulseDB's plan names (mf/nav_bm plan_name): "Broker" is the Regular plan.
+PULSE_PLAN = {"direct": "Direct", "broker": "Regular", "regular": "Regular"}
+NOT_STATED = ("option not stated", "plan not stated")
+
+
+def pulse_plan_fill(row, verdict, pulse_row: dict | None) -> Included | None:
+    """A scheme AMFI leaves without a plan or option (daily file blank, Scheme Master silent — e.g. Motilal Oswal BSE
+    Enhanced Value Index Fund, 150518 / 150519): Included as PulseDB states it, only when Pulse lists the same scheme
+    code as a Growth option of a Direct / Regular plan. AMFI's printed values are never overridden."""
+    if not isinstance(verdict, Excluded) or verdict.reason not in NOT_STATED or not pulse_row:
+        return None
+    plan = PULSE_PLAN.get(str(pulse_row.get("plan_name") or "").strip().lower())
+    if plan is None or str(pulse_row.get("option_name") or "").strip().lower() != "growth":
+        return None
+    printed = PLAN_MAP.get(row.plan.strip().lower()) if row.plan.strip() else None
+    if printed and printed != plan:
+        return None   # AMFI prints a different plan: AMFI wins, the scheme stays out
+    asset_class, category = section_category(row.section)
+    return Included(asset_class, category, plan, "Growth", "pulse")
 
 
 def is_valid_isin(isin: str | None) -> bool:

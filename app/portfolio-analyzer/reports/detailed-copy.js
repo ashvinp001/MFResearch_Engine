@@ -6,8 +6,9 @@
  */
 
 import { benchmarkPhrase, formatDate, formatInr } from "../../shared/format.js";
+import { indexCategoryLabel, isIndexFund } from "../../../calculation-engine/index.js";
 
-export const GROUP_LABEL = { equity: "EQUITY", hybrid: "HYBRID", debt: "DEBT", goldSilver: "GOLD / SILVER" };
+export const GROUP_LABEL = { equity: "EQUITY", hybrid: "HYBRID", debt: "DEBT", goldSilver: "GOLD / SILVER", other: "OTHER" };
 // Report details options = the exact labels of the Prosperr logic (calculation-engine/portfolio-analyzer/report-profile.js).
 export {
   DIVERSIFICATION_STATUS as DIVERSIFICATION, RISK_PROFILE_LABELS as RISK_PROFILES, HORIZON_LABELS as HORIZONS,
@@ -34,9 +35,28 @@ export function returnsIntro(model) {
 export function benchmarkColumn(name) {
   return !name || name === "Blended Benchmark" ? "BENCHMARK" : name.toUpperCase();
 }
-export const PERFORMANCE_NOTE = "Each fund's return is shown on the first line, with its category benchmark highlighted on the blue line below (1Y, 3Y, 5Y; 3Y & 5Y annualised). Debt funds and ETFs are not included in this table.";
+// AMFI category names too long for a narrow table column, in the short form advisors use.
+const CATEGORY_SHORT = {
+  "Balanced Advantage / Dynamic Asset Allocation": "Balanced Advantage",
+  "10-year Constant Maturity Gilt Fund": "10Y Constant Maturity Gilt",
+  "Ultra Short to Short Term Fund": "Ultra Short to Short Term",
+};
+/** Category label for a table cell (upper case): an index fund by the index it tracks ("INDEX FUND · NIFTY 50"),
+ * else the short form of a long AMFI name, else the name itself. */
+export function categoryLabel(category, { name = "", benchmark = null } = {}) {
+  if (!category) return null;
+  if (isIndexFund({ category })) return indexCategoryLabel({ category, name, benchmarkName: benchmark }).toUpperCase();
+  return (CATEGORY_SHORT[category] ?? category).toUpperCase();
+}
+export const PERFORMANCE_NOTE ="Each fund's return is shown on the first line, with its category benchmark highlighted on the blue line below (1Y, 3Y, 5Y; 3Y & 5Y annualised). Debt funds and ETFs are not included in this table.";
 
-const PENDING = "Available once fund and NAV data is connected.";
+// Client-facing wording when a figure cannot be shown for this portfolio: a plain statement of fact.
+const NOT_AVAILABLE = {
+  returns: "Trailing returns are not available for the current holdings.",
+  risk: "Risk measures need three years of monthly returns and are not available for the current holdings.",
+  allocation: "Asset allocation data is not available for the funds held.",
+  sectors: "Sector allocation data is not available for the funds held.",
+};
 const pct1 = (v) => `${v.toFixed(1)}%`;
 const signed1 = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -48,7 +68,7 @@ export function sourceNote(model, { amountsNote = false } = {}) {
     : model.recommended?.mode === "sip" ? "Amounts are the monthly SIP amount × allocation (invested every month). "
     : "Amounts are the lumpsum (one-time) amount × allocation. ";
   if (!model.portfolioReturns && !model.risk) {
-    return `${lead}Holdings, invested value and current value are read from the uploaded CAS. Trailing returns, risk ratios, market-cap and sector splits will appear once fund and NAV data is connected. Mutual fund investments are subject to market risks; read all scheme related documents carefully. Prepared via Prosperr Insights. Data as on ${date}.`;
+    return `${lead}Holdings, invested value and current value are as per the Consolidated Account Statement. Trailing returns, risk measures and allocation analysis are shown where sufficient fund data is available. Mutual fund investments are subject to market risks; read all scheme related documents carefully. Prepared via Prosperr Insights. Data as on ${date}.`;
   }
   const coverage = model.coverage ? ` (NAV history for ${model.coverage.covered} of ${model.coverage.total} funds)` : "";
   const bench = model.benchmarkName
@@ -79,7 +99,7 @@ export function observations(model) {
   const has = (v) => Number.isFinite(v);
   const r3 = model.portfolioReturns?.find((r) => r.period === "3Y");
   const r1 = model.portfolioReturns?.find((r) => r.period === "1Y");
-  let returns = [PENDING];
+  let returns = [NOT_AVAILABLE.returns];
   if (r3 && has(r3.portfolio) && has(r3.benchmark)) {
     returns = ["Compounding at ", { b: `${pct1(r3.portfolio)} p.a.` }, ` over 3Y vs ${pct1(r3.benchmark)} — `, { [r3.excess >= 0 ? "up" : "down"]: `${signed1(r3.excess)} ${r3.excess >= 0 ? "ahead" : "behind"}` }, "."];
   } else if (r3 && has(r3.portfolio)) {
@@ -89,7 +109,7 @@ export function observations(model) {
   }
 
   const r = model.risk;
-  let risk = [PENDING];
+  let risk = [NOT_AVAILABLE.risk];
   if (r && has(r.beta) && has(r.alpha)) {
     risk = [{ b: r.beta < 1 ? "Lower risk" : "Higher risk" }, " than the market (beta ", { b: r.beta.toFixed(2) }, "), Sharpe ", { b: r.sharpe.toFixed(2) }, ", vol ", { b: pct1(r.stdDev) }, ", alpha ", { [r.alpha >= 0 ? "up" : "down"]: `${r.alpha >= 0 ? "+" : ""}${r.alpha.toFixed(2)}` }, "."];
   } else if (r && has(r.stdDev)) {
@@ -100,11 +120,11 @@ export function observations(model) {
   const m = model.marketCap;
   const allocation = c
     ? [{ b: `${Math.round(c.equity)}% equity / ${Math.round(c.debt)}% debt / ${Math.round(c.goldSilver)}% gold-silver` }, m ? `; equity is ${m.large >= Math.max(m.mid, m.small) ? "large-cap led" : "mid/small-cap led"} (${Math.round(m.large)}L / ${Math.round(m.mid)}M / ${Math.round(m.small)}S).` : "."]
-    : [PENDING];
+    : [NOT_AVAILABLE.allocation];
 
   const sectors = model.sectors?.length
     ? [`Equity leans to ${model.sectors.slice(0, 3).map((s) => `${s.sector} ${Math.round(s.pct)}%`).join(", ")}, so returns track these themes closely.`]
-    : [PENDING];
+    : [NOT_AVAILABLE.sectors];
 
   // Funds, not folios: the same fund in several folios with one recommendation counts once.
   const counts = { invest: 0, hold: 0, sell: 0 };
@@ -185,14 +205,4 @@ export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
       : `${row.name} is flagged for exit — consider redeeming and redeploying the proceeds into ${hasRecommended ? "the Prosperr Recommended Portfolio" : "higher-conviction funds"}.`;
   }
   return `${row.name} — recommendation not set.`;
-}
-
-/** "1Y 18.9% (+25.2% vs NIFTY 500 Index)" or "1Y —". */
-export function oneYearTag(row) {
-  const r1 = row.returns?.r1y;
-  const b1 = row.benchmarkReturns?.r1y;
-  if (typeof r1 !== "number") return { text: "1Y —", tone: "" };
-  if (typeof b1 !== "number") return { text: `1Y ${pct1(r1)}`, tone: r1 >= 0 ? "up" : "down" };
-  const edge = r1 - b1;
-  return { text: `1Y ${pct1(r1)} (${signed1(edge)} vs ${row.benchmark ?? "benchmark"})`, tone: edge >= 0 ? "up" : "down" };
 }

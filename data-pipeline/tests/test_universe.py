@@ -316,3 +316,43 @@ class MasterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PulseFillTests(unittest.TestCase):
+    """Schemes both AMFI files leave without a plan / option (e.g. Motilal Oswal BSE Enhanced Value Index Fund)."""
+    SECTION = "Open Ended Schemes(Other Scheme - Index Funds)"
+    TEXT = amfi_file(SECTION, "", "Motilal Oswal Mutual Fund", "",
+                     "150518;INF247L01BF2;-;Motilal Oswal BSE Enhanced Value Index Fund;;;25.6058;20-Oct-2026",
+                     "150519;INF247L01BG0;-;Motilal Oswal BSE Enhanced Value Index Fund;;;24.8932;20-Oct-2026")
+    PULSE = {150518: {"plan_name": "Direct", "option_name": "Growth"}, 150519: {"plan_name": "Broker", "option_name": "Growth"}}
+
+    def verdicts(self, text, pulse):
+        included, excluded, _ = resolve(parse_nav_file(text), {}, pulse)
+        return {r.scheme_code: v for r, v in included + excluded}
+
+    def test_without_pulse_both_stay_out(self):
+        v = self.verdicts(self.TEXT, None)
+        self.assertEqual({v[150518].reason, v[150519].reason}, {"option not stated"})
+
+    def test_pulse_fills_plan_and_growth(self):
+        v = self.verdicts(self.TEXT, self.PULSE)
+        self.assertEqual((v[150518].plan, v[150518].option, v[150518].source), ("Direct", "Growth", "pulse"))
+        self.assertEqual(v[150519].plan, "Regular")   # Pulse "Broker" = Regular
+
+    def test_pulse_idcw_or_unknown_plan_is_not_used(self):
+        v = self.verdicts(self.TEXT, {150518: {"plan_name": "Direct", "option_name": "IDCW"}, 150519: {"plan_name": "Institutional", "option_name": "Growth"}})
+        self.assertTrue(all(isinstance(x, Excluded) for x in v.values()))
+
+    def test_amfi_printed_plan_is_never_overridden(self):
+        text = amfi_file(self.SECTION, "", "Motilal Oswal Mutual Fund", "",
+                         "150518;INF247L01BF2;-;Motilal Oswal BSE Enhanced Value Index Fund;Regular Plan;;25.6058;20-Oct-2026")
+        v = self.verdicts(text, {150518: {"plan_name": "Direct", "option_name": "Growth"}})
+        self.assertIsInstance(v[150518], Excluded)
+
+    def test_pulse_line_gives_way_to_a_printed_growth_line(self):
+        text = amfi_file(self.SECTION, "", "Motilal Oswal Mutual Fund", "",
+                         "150518;INF247L01BF2;-;Motilal Oswal BSE Enhanced Value Index Fund;;;25.6058;20-Oct-2026",
+                         "150520;INF247L01BH8;-;Motilal Oswal BSE Enhanced Value Index Fund;Direct Plan;Growth;25.6;20-Oct-2026")
+        v = self.verdicts(text, {150518: {"plan_name": "Direct", "option_name": "Growth"}})
+        self.assertTrue(v[150518].reason.startswith("duplicate"))
+        self.assertEqual(v[150520].source, "daily")

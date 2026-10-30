@@ -168,20 +168,22 @@ try {
         $response.OutputStream.Write($bytes, 0, $bytes.Length)
         continue
       }
-      # GET /api/nav-history?codes=122639,100119 -> daily NAVs (last 5 years) of those schemes, via
-      # data-pipeline/nav_api.py (which reads Supabase with the key from .env). Codes are digits only.
+      # GET /api/nav-history?codes=122639,100119[&years=10] -> daily NAVs (last 5 years, or 1-20 years) of those
+      # schemes, via data-pipeline/nav_api.py (which reads Supabase with the key from .env). Codes are digits only.
       if ($context.Request.HttpMethod -eq "GET" -and $context.Request.Url.AbsolutePath -eq "/api/nav-history") {
         $response.ContentType = "application/json"
         $response.Headers.Add("Cache-Control", "no-store")
         $codes = "$($context.Request.QueryString['codes'])"
-        if ($codes -notmatch '^\d{1,7}(,\d{1,7}){0,79}$') {
+        $years = "$($context.Request.QueryString['years'])"
+        if ($codes -notmatch '^\d{1,7}(,\d{1,7}){0,79}$' -or ($years -and $years -notmatch '^([1-9]|1\d|20)$')) {
           $response.StatusCode = 400
           $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"codes must be a comma-separated list of scheme codes"}')
         } else {
           try {
             $python = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
             $env:PYTHONIOENCODING = "utf-8"
-            $json = & $python -I (Join-Path $root "data-pipeline\nav_api.py") @($codes -split ',') 2>$null | Out-String
+            $yearsArg = @(); if ($years) { $yearsArg = @("--years=$years") }
+            $json = & $python -I (Join-Path $root "data-pipeline\nav_api.py") @($yearsArg + ($codes -split ',')) 2>$null | Out-String
             if ($LASTEXITCODE -ne 0 -or -not $json.Trim()) { throw "nav_api failed" }
             $bytes = [Text.Encoding]::UTF8.GetBytes($json.Trim())
           } catch {
@@ -192,19 +194,23 @@ try {
         $response.OutputStream.Write($bytes, 0, $bytes.Length)
         continue
       }
-      # GET /api/benchmark-history?codes=OB48,AUB3 -> daily benchmark prices (last 5 years) from the benchmark
-      # bucket, via data-pipeline/benchmark_api.py. Pulse benchmark codes only.
+      # GET /api/benchmark-history?codes=OB48,AUB3[&years=10] -> daily benchmark prices (last 5 years, or 1-20 years)
+      # from the benchmark bucket, via data-pipeline/benchmark_api.py. Pulse benchmark codes, and our own (SBGOLD, SBGS,
+      # SB<pulse code> — data-pipeline/benchmark_blends.py).
       if ($context.Request.HttpMethod -eq "GET" -and $context.Request.Url.AbsolutePath -eq "/api/benchmark-history") {
         $response.ContentType = "application/json"
         $response.Headers.Add("Cache-Control", "no-store")
         $codes = "$($context.Request.QueryString['codes'])"
-        if ($codes -notmatch '^(OB|OHB|AB|AHB|AUB)\d{1,5}(,(OB|OHB|AB|AHB|AUB)\d{1,5}){0,79}$') {
+        $years = "$($context.Request.QueryString['years'])"
+        $code = '((OB|OHB|AB|AHB|AUB)\d{1,5}|SB(GOLD|GS|(OB|OHB|AB|AHB|AUB)\d{1,5}))'
+        if ($codes -notmatch "^$code(,$code){0,79}$" -or ($years -and $years -notmatch '^([1-9]|1\d|20)$')) {
           $response.StatusCode = 400
           $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"codes must be a comma-separated list of benchmark codes"}')
         } else {
           try {
             $python = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
-            $json = & $python -I (Join-Path $root "data-pipeline\benchmark_api.py") @($codes -split ',') 2>$null | Out-String
+            $yearsArg = @(); if ($years) { $yearsArg = @("--years=$years") }
+            $json = & $python -I (Join-Path $root "data-pipeline\benchmark_api.py") @($yearsArg + ($codes -split ',')) 2>$null | Out-String
             if ($LASTEXITCODE -ne 0 -or -not $json.Trim()) { throw "benchmark_api failed" }
             $bytes = [Text.Encoding]::UTF8.GetBytes($json.Trim())
           } catch {
@@ -217,6 +223,65 @@ try {
       }
       # GET /api/peer-stats?codes=122639,100119 -> each fund's peer-group figures (returns vs category median,
       # ranks, consistency, risk) for the Invest / Hold / Sell logic, via data-pipeline/peer_stats_api.py.
+      # GET /api/fund-metadata?codes=… -> AUM, inception, manager per scheme (PulseDB, stored daily) via
+      # data-pipeline/fund_metadata_api.py. Up to 400 scheme codes.
+      if ($context.Request.HttpMethod -eq "GET" -and $context.Request.Url.AbsolutePath -eq "/api/fund-metadata") {
+        $response.ContentType = "application/json"
+        $response.Headers.Add("Cache-Control", "no-store")
+        $codes = "$($context.Request.QueryString['codes'])"
+        if ($codes -notmatch '^\d{1,7}(,\d{1,7}){0,399}$') {
+          $response.StatusCode = 400
+          $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"codes must be a comma-separated list of scheme codes"}')
+        } else {
+          try {
+            $python = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+            $json = & $python -I (Join-Path $root "data-pipeline\fund_metadata_api.py") @($codes -split ',') 2>$null | Out-String
+            if ($LASTEXITCODE -ne 0 -or -not $json.Trim()) { throw "fund_metadata_api failed" }
+            $bytes = [Text.Encoding]::UTF8.GetBytes($json.Trim())
+          } catch {
+            $response.StatusCode = 503
+            $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"Fund details are not available right now"}')
+          }
+        }
+        $response.OutputStream.Write($bytes, 0, $bytes.Length)
+        continue
+      }
+      # /api/scorecard-settings -> the Fund Scorecard's weights and conditions (data-pipeline/scorecard_settings.py).
+      # GET: anyone; the reply says whether this visitor may edit and whether an edit password is set.
+      # POST (save), POST /verify (password check) and POST /password (create / change the edit password): this PC (the
+      # owner) only - others get 403. Saving and changing need the password; creating is possible only while none is set.
+      $settingsPath = $context.Request.Url.AbsolutePath
+      if ($settingsPath -in @("/api/scorecard-settings", "/api/scorecard-settings/verify", "/api/scorecard-settings/password")) {
+        $response.ContentType = "application/json"
+        $response.Headers.Add("Cache-Control", "no-store")
+        $python = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+        $script = Join-Path $root "data-pipeline\scorecard_settings.py"
+        $canEdit = if ($isLocalPc) { "true" } else { "false" }
+        try {
+          if ($context.Request.HttpMethod -eq "GET" -and $settingsPath -eq "/api/scorecard-settings") {
+            $json = (& $python -I $script get "--can-edit=$canEdit" 2>$null | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $json) { throw "scorecard_settings get failed" }
+            $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+          } elseif ($context.Request.HttpMethod -eq "POST" -and $isLocalPc -and $context.Request.ContentLength64 -le 4096) {
+            $reader = New-Object IO.StreamReader($context.Request.InputStream, [Text.Encoding]::UTF8)
+            $body = $reader.ReadToEnd()
+            $OutputEncoding = New-Object Text.UTF8Encoding $false   # UTF-8 without a byte-order mark
+            $command = switch ($settingsPath) { "/api/scorecard-settings/verify" { "verify" } "/api/scorecard-settings/password" { "password" } default { "set" } }
+            $json = ($body | & $python -I $script $command 2>$null | Out-String).Trim()
+            if (-not $json) { throw "scorecard_settings $command failed" }
+            if ($LASTEXITCODE -ne 0) { $response.StatusCode = 400 }
+            $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+          } else {
+            $response.StatusCode = 403
+            $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"Only the owner can change the scorecard settings"}')
+          }
+        } catch {
+          $response.StatusCode = 503
+          $bytes = [Text.Encoding]::UTF8.GetBytes('{"error":"Scorecard settings are not available right now"}')
+        }
+        $response.OutputStream.Write($bytes, 0, $bytes.Length)
+        continue
+      }
       if ($context.Request.HttpMethod -eq "GET" -and $context.Request.Url.AbsolutePath -eq "/api/peer-stats") {
         $response.ContentType = "application/json"
         $response.Headers.Add("Cache-Control", "no-store")

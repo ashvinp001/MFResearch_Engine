@@ -5,7 +5,7 @@
  * loadValuationData() → Promise<{ schemeMap, latestNavs, schemes } | { error }>   schemes: every listed fund (with plan)
  * Loaded once per page visit and shared. Never throws: when the data cannot be loaded the caller
  * keeps the statement's own values and shows the reason.
- * loadNavHistories(codes) → Promise<{ histories, missing } | { error }>   (GET /api/nav-history)
+ * loadNavHistories(codes, { years }) → Promise<{ histories, missing } | { error }>   (GET /api/nav-history; years 1–20, default 5)
  * loadFundHoldings(isins) / loadPeerStats(codes) → data | null                (PulseDB holdings / peer statistics)
  */
 
@@ -13,6 +13,9 @@ import { buildSchemeMap, navSeries } from "../../calculation-engine/index.js";
 
 const LIST_FILES = ["regular", "direct", "etf"];
 let pending = null;
+
+/** "&years=N" for the history endpoints (1–20 years; default 5 when omitted). */
+const yearsParam = (years) => (Number.isInteger(years) && years >= 1 && years <= 20 ? `&years=${years}` : "");
 
 async function fetchJson(url) {
   const response = await fetch(url, { cache: "no-store" });
@@ -83,16 +86,79 @@ export async function loadPeerStats(codes) {
 }
 
 /**
- * Daily benchmark prices (last 5 years) for these Pulse benchmark codes (GET /api/benchmark-history)
+ * Fund details from PulseDB, stored daily (GET /api/fund-metadata) → { generatedAt, funds: { [code]: { aum (₹ crore),
+ * inception, manager, riskometer, exitLoad } } } | null. Never throws.
+ */
+export async function loadFundMetadata(codes) {
+  const unique = [...new Set(codes)].filter((code) => Number.isInteger(code) && code > 0).sort((a, b) => a - b);
+  if (!unique.length) return null;
+  try {
+    let out = null;
+    for (let i = 0; i < unique.length; i += 400) {
+      const body = await fetchJson(`/api/fund-metadata?codes=${unique.slice(i, i + 400).join(",")}`);
+      out = out ? { ...out, funds: { ...out.funds, ...body.funds } } : body;
+    }
+    return out?.funds ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fund Scorecard owner settings (GET /api/scorecard-settings) → { canEdit, passwordSet, settings } | null. Never throws. */
+export async function loadScorecardSettings() {
+  try {
+    return await fetchJson("/api/scorecard-settings");
+  } catch {
+    return null;
+  }
+}
+
+/** Checks the scorecard edit password (POST, owner's PC only) → { ok: true } | { error }. The password is not kept. */
+export async function verifyScorecardPassword(password) {
+  try {
+    const response = await fetch("/api/scorecard-settings/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+    const body = await response.json().catch(() => ({}));
+    return response.ok && body.ok ? { ok: true } : { error: body.error ?? `HTTP ${response.status}` };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+/** Creates the scorecard edit password while none is set (POST, owner's PC only; it is final once set) → { ok } | { error }. */
+export async function setScorecardPassword({ password, confirm }) {
+  try {
+    const response = await fetch("/api/scorecard-settings/password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, confirm }) });
+    const body = await response.json().catch(() => ({}));
+    return response.ok && body.ok ? { ok: true } : { error: body.error ?? `HTTP ${response.status}` };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+/** Saves the owner's scorecard settings with the edit password (POST, owner's PC only) → { settings } | { error }. */
+export async function saveScorecardSettings(settings, password) {
+  try {
+    const response = await fetch("/api/scorecard-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...settings, password }) });
+    const body = await response.json().catch(() => ({}));
+    return response.ok ? { settings: body } : { error: body.error ?? `HTTP ${response.status}` };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+/**
+ * Daily benchmark prices (last 5 years) for these benchmark codes (GET /api/benchmark-history): Pulse's, and
+ * our own (SBGOLD, SBGS, SB<pulse code> — data-pipeline/benchmark_blends.py)
  * → { [code]: { name, series } } | null when unavailable. Never throws.
  */
-export async function loadBenchmarkHistories(codes) {
-  const unique = [...new Set(codes)].filter((code) => /^(OB|OHB|AB|AHB|AUB)\d{1,5}$/.test(code ?? "")).sort();
+const BENCHMARK_CODE = /^((OB|OHB|AB|AHB|AUB)\d{1,5}|SB(GOLD|GS|(OB|OHB|AB|AHB|AUB)\d{1,5}))$/;
+export async function loadBenchmarkHistories(codes, { years = null } = {}) {
+  const unique = [...new Set(codes)].filter((code) => BENCHMARK_CODE.test(code ?? "")).sort();
   if (!unique.length) return {};
   try {
     const out = {};
     for (let i = 0; i < unique.length; i += 80) {
-      const body = await fetchJson(`/api/benchmark-history?codes=${unique.slice(i, i + 80).join(",")}`);
+      const body = await fetchJson(`/api/benchmark-history?codes=${unique.slice(i, i + 80).join(",")}${yearsParam(years)}`);
       for (const [code, s] of Object.entries(body.series ?? {})) out[code] = { name: s.name, series: navSeries({ dates: s.dates, navs: s.values }) };
     }
     return out;
@@ -105,14 +171,14 @@ export async function loadBenchmarkHistories(codes) {
  * Daily NAV history (last 5 years) for these AMFI scheme codes → { histories: { [code]: navSeries }, missing } | { error }.
  * Never throws.
  */
-export async function loadNavHistories(codes) {
+export async function loadNavHistories(codes, { years = null } = {}) {
   const unique = [...new Set(codes)].filter((code) => Number.isInteger(code) && code > 0).sort((a, b) => a - b);
   if (!unique.length) return { histories: {}, missing: [] };
   try {
     const histories = {};
     const missing = [];
     for (let i = 0; i < unique.length; i += 80) {   // the server accepts up to 80 codes per request
-      const body = await fetchJson(`/api/nav-history?codes=${unique.slice(i, i + 80).join(",")}`);
+      const body = await fetchJson(`/api/nav-history?codes=${unique.slice(i, i + 80).join(",")}${yearsParam(years)}`);
       for (const [code, series] of Object.entries(body.series ?? {})) histories[code] = navSeries(series);
       missing.push(...(body.missing ?? []));
     }

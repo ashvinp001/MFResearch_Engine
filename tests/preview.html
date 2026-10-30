@@ -42,7 +42,8 @@
       }
     } else {
       const file = params.get("file") ?? "cams.pdf";
-      portfolio = await analyzeCasPdf({ data: await (await fetch(`pdf-fixtures/${file}`)).arrayBuffer(), fileName: file, pdfjs });
+      // &password=… for a protected local fixture (test aid only; never stored)
+      portfolio = await analyzeCasPdf({ data: await (await fetch(`pdf-fixtures/${file}`)).arrayBuffer(), password: params.get("password") ?? undefined, fileName: file, pdfjs });
       // &live=1 → exactly as after an upload: revalue at the latest NAV, fund data from NAV history.
       if (params.get("live")) portfolio = await app.withLatestNav(portfolio);
       if (params.get("report") === "snapshot") await app.openSnapshot(portfolio);
@@ -64,7 +65,7 @@
           amount: 1000000,
           rows: [
             ...pickable.map((h, i) => ({ fundId: `h:${holdingKey(h)}`, name: h.schemeName, isin: h.isin, pct: i === 0 ? "40" : "33.33" })),
-            { fundId: "other", name: "Mirae Asset Large & Midcap Fund - Direct Plan - Growth", isin: "INF769K01EG9", pct: pickable.length === 2 ? "26.67" : "60" },
+            { fundId: "other", name: "Mirae Asset Large & Midcap Fund - Direct Plan - Growth", isin: "INF769K01BI1", pct: pickable.length === 2 ? "26.67" : "60" },
           ],
         };
       }

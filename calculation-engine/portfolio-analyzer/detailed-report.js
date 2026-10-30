@@ -11,7 +11,9 @@
  *   verdictSummary: { invest|hold|sell: { count, value, share } },
  *   amcAllocation, composition, sectors, marketCap, benchmarkName,
  *   marketCapByFund: { rows: [ { name, large, mid, small } ], blended } | null,
- *   performance: [ { key, rows: [Row with returns] } ],                       // equity, hybrid, gold/silver; debt & ETFs excluded
+ *   performance: [ { key, rows: [Row with returns] } ],                       // equity, hybrid, gold/silver; debt & ETFs excluded; one row per ISIN
+ *   overlap: { funds, closest, pairs (high only), buckets: { high, moderate, low }, distinct, asOn } | null   // see overlapModel
+ *   overlapApplies: boolean                                                   // false with only one fund: no Portfolio Overlap section
  *   portfolioReturns: [ { period, portfolio, benchmark, excess } ] | null,
  *   risk, coverage,
  *   recommended: { rows: [ { name, isin, pct, amount, category, benchmark, returns } ], blended, amount, totalPct, mode: "lumpsum"|"sip" }
@@ -23,7 +25,8 @@
 import { holdingKey } from "../model/portfolio.schema.js";
 import { toPaise } from "../cas/parse-values.js";
 import { buildSnapshot } from "./snapshot.js";
-import { fundOverlap } from "./auto-recommendation.js";
+import { fundOverlap, sharedStocks } from "./auto-recommendation.js";
+import { groupFromMix } from "./portfolio-performance.js";
 
 export const ASSET_GROUPS = Object.freeze(["equity", "hybrid", "debt", "goldSilver"]);
 const PERIODS = ["r1y", "r3y", "r5y"];
@@ -58,7 +61,9 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
         const s = calls[holdingKey(holding)];
         return s && s.verdict && s.verdict === verdicts[holdingKey(holding)] ? { grade: s.grade, stage: s.stage ?? "fund" } : null;
       })(),
-      assetClass: info?.assetClass ?? null,
+      // AMFI class / category / name first; a fund of funds or solution fund the name cannot place goes by its
+      // look-through holdings (65% rule). Anything still unplaced is shown under "OTHER", never under another heading.
+      assetClass: info?.assetClass ?? groupFromMix(info?.assetMix) ?? null,
       plan: info?.plan ?? null,                    // Regular | Direct | ETF
       category: info?.category ?? null,
       benchmark: info?.benchmark ?? null,
@@ -86,18 +91,36 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
   const equityRows = rows.filter((row) => row.assetClass === "equity" && row.marketCap && !passive(row)).sort(byName);
   const listedPaise = equityRows.reduce((sum, row) => sum + row.currentPaise, 0);
   const blendOf = (key) => (listedPaise ? equityRows.reduce((sum, row) => sum + row.currentPaise * row.marketCap[key], 0) / listedPaise : 0);
+  // One row per scheme: its Regular and Direct plans hold the same portfolio (same market-cap split), and several
+  // folios are the same fund — listed once, under the scheme's name without plan / option / demat wording.
+  const byScheme = new Map();
+  for (const row of equityRows) {
+    const key = schemeKey(row.name);
+    if (!byScheme.has(key)) byScheme.set(key, { name: schemeName(row.name), ...row.marketCap });
+  }
   const marketCapByFund = equityRows.length
     ? {
-        rows: equityRows.map((row) => ({ name: row.name, ...row.marketCap })),
+        rows: [...byScheme.values()].sort(byName),
         blended: { large: blendOf("large"), mid: blendOf("mid"), small: blendOf("small") },
         excludedNote: "Index funds, ETFs and debt funds are not included in this table.",
       }
     : null;
 
   // Fund performance: equity, hybrid and gold/silver funds — ETFs and debt funds are not listed (owner's rule).
+  // One row per fund: the same ISIN (same scheme, plan and option) held in several folios has identical returns, so it
+  // is listed once. Regular and Direct plans of a scheme stay separate rows — their returns differ.
   const etf = (row) => row.plan === "ETF" || /\betfs?\b/i.test(row.category ?? "");
+  const oncePerFund = (list) => {
+    const seen = new Set();
+    return list.filter((row) => {
+      const id = row.isin ?? row.name;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
   const performance = (known ? ["equity", "hybrid", "goldSilver"] : [null])
-    .map((key) => ({ key, rows: rows.filter((row) => (known ? row.assetClass === key : row.assetClass !== "debt") && !etf(row)).sort(byName) }))
+    .map((key) => ({ key, rows: oncePerFund(rows.filter((row) => (known ? row.assetClass === key : row.assetClass !== "debt") && !etf(row)).sort(byName)) }))
     .filter((group) => group.rows.length);
 
   // Invest / Hold / Sell totals (count, value, share of current value), summed in paise.
@@ -139,7 +162,20 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
     recommended: recommendedModel(allocation, rows, fundData),
     suggestions,   // Suggestion Box (autoRecommend flags): [{ id, text }]
     overlap: overlapModel(rows, fundHoldings),
+    // Portfolio Overlap needs at least two different funds; with one fund (in any number of folios) the section is left
+    // out of the report and the sections after it move up.
+    overlapApplies: new Set(rows.map((row) => row.isin ?? row.name)).size > 1,
   };
+}
+
+/** A scheme's name without plan, option, demat or "formerly" wording: "Mirae Asset Large Cap Fund - Direct Plan - Growth
+ * (Demat)" → "Mirae Asset Large Cap Fund". */
+function schemeName(name) {
+  const clean = String(name ?? "").replace(/\s*\((?:formerly|erstwhile)[^)]*\)/gi, "").replace(/\s*\((?:non[\s-]*)?demat\)/gi, "");
+  const parts = clean.split(/\s+-\s+/);
+  const end = parts.findIndex((p) => /\b(fund|etf|fof)\b/i.test(p));
+  return parts.slice(0, end >= 0 ? end + 1 : 1).join(" - ")
+    .replace(/\s+\b(direct|regular|dir|reg)\b(\s+plan)?(\s+growth)?(\s+option)?\s*$/i, "").replace(/\s+growth\s*$/i, "").replace(/\s{2,}/g, " ").trim();
 }
 
 /** The scheme a CAS name belongs to, whatever its plan / option / demat wording ("DSP Equity Savings Fund - Dir - Growth (Demat)" ≡ "… - Reg - Growth (Non-Demat)"). */
@@ -150,51 +186,81 @@ function schemeKey(name) {
     .replace(/[^a-z0-9&]+/g, " ").trim();
 }
 
-export const OVERLAP_MAX_FUNDS = 12;    // funds shown in the matrix (largest by value); every pair is still checked
-export const OVERLAP_HIGH = 0.5;        // a pair at or above this share of the same stocks is listed as high overlap
+export const OVERLAP_HIGH = 0.5;        // a pair at or above this share of the same stocks: high overlap (red)
+export const OVERLAP_LOW = 0.25;        // below this: low overlap (green); in between: moderate (amber)
+export const OVERLAP_NONE = 0.1;        // a fund whose closest overlap is below this is shown as having none
+
+// Compared: equity and hybrid funds (index funds and equity ETFs included). Left out: debt and gold / silver funds (no
+// stocks), funds of funds (owner's rule — they hold other funds) and arbitrage funds (their stock positions are hedged).
+const NOT_COMPARED = /\bfof\b|fund\s+of\s+funds?|fund-of-funds?|arbitrage/i;
+const comparedInOverlap = (row) => (row.assetClass === "equity" || row.assetClass === "hybrid") && !NOT_COMPARED.test(`${row.category ?? ""} ${row.name}`);
 
 /**
- * Portfolio Overlap (Section 04): for the client's funds that hold stocks, the share of two funds' equity portfolios
- * invested in the same stocks (auto-recommendation.fundOverlap, 0–1). One entry per fund (folios combined), largest
- * by value first; the matrix shows up to OVERLAP_MAX_FUNDS of them, the high-overlap list covers every fund.
+ * Portfolio Overlap (Section 04): for the client's equity and hybrid funds, the share of two funds' stock portfolios
+ * invested in the same stocks (auto-recommendation.fundOverlap, 0–1; a hybrid fund's stock portion scaled to 100%).
+ * One entry per fund — its folios and both its plans combined, under the scheme's plan-neutral name — largest by value.
+ * → { funds: [{ n, name, isin, weightPct, category }],
+ *     closest: every fund's closest overlap, one row per pair (two funds that are each other's closest share a row),
+ *              highest first: [{ a, b, aN, bN, overlap, band }]; a fund below OVERLAP_NONE with every fund:
+ *              [{ solo: name, n, overlap (its highest) }],
+ *     pairs: high pairs, buckets: { high, moderate, low }: [{ a, b, aN, bN, overlap, band, shared: [stock names] }]
+ *     (each bucket highest overlap first), distinct: names of funds below OVERLAP_LOW with every other fund, asOn }
  * null when holdings data is not available (or fewer than two funds hold stocks).
  */
 function overlapModel(rows, fundHoldings) {
   if (!fundHoldings) return null;
-  // Equity funds only (as in a fund-overlap matrix): a hybrid's or an arbitrage fund's stock portion is only part of
-  // it, so its overlap would overstate the shared exposure. One entry per fund: its folios and both its plans
-  // (Regular and Direct hold the same portfolio) are combined.
-  const byIsin = new Map();
+  // One entry per fund: its folios and both its plans (Regular and Direct hold the same portfolio) are combined.
+  const byScheme = new Map();
   for (const row of rows) {
-    if (!row.isin || !fundHoldings[row.isin] || row.assetClass !== "equity") continue;
+    if (!row.isin || !fundHoldings[row.isin] || !comparedInOverlap(row)) continue;
     const key = schemeKey(row.name);
-    const entry = byIsin.get(key);
+    const entry = byScheme.get(key);
     if (entry) entry.weightPct += row.weightPct;
-    else byIsin.set(key, { isin: row.isin, name: row.name, weightPct: row.weightPct });
+    else byScheme.set(key, { isin: row.isin, name: schemeName(row.name), weightPct: row.weightPct, category: row.category ?? null });
   }
   // Funds with equity holdings only (an overlap with itself is defined): debt and gold funds have none.
-  const funds = [...byIsin.values()].filter((f) => fundOverlap(fundHoldings[f.isin], fundHoldings[f.isin]) !== null)
-    .sort((a, b) => b.weightPct - a.weightPct || byName(a, b));
+  const funds = [...byScheme.values()].filter((f) => fundOverlap(fundHoldings[f.isin], fundHoldings[f.isin]) !== null)
+    .sort((a, b) => b.weightPct - a.weightPct || byName(a, b))
+    .map((f, i) => ({ n: i + 1, ...f }));
   if (funds.length < 2) return null;
   const value = (a, b) => {
     const o = fundOverlap(fundHoldings[a.isin], fundHoldings[b.isin]);
     return o === null ? null : Math.min(1, o / 100);
   };
-  const pairs = [];
+  const all = [];
   for (let i = 0; i < funds.length; i++) {
     for (let j = i + 1; j < funds.length; j++) {
       const o = value(funds[i], funds[j]);
-      if (o !== null && o >= OVERLAP_HIGH) pairs.push({ a: funds[i].name, b: funds[j].name, overlap: o });
+      if (o === null) continue;
+      const band = overlapBand(o);
+      all.push({ a: funds[i].name, b: funds[j].name, aN: funds[i].n, bN: funds[j].n, overlap: o, band,
+        shared: sharedStocks(fundHoldings[funds[i].isin], fundHoldings[funds[j].isin]).map((s) => s.name) });
     }
   }
-  const shown = funds.slice(0, OVERLAP_MAX_FUNDS);
+  all.sort((p, q) => q.overlap - p.overlap || p.aN - q.aN || p.bN - q.bN);
+  const buckets = { high: all.filter((p) => p.band === "high"), moderate: all.filter((p) => p.band === "moderate"), low: all.filter((p) => p.band === "low") };
+  // Every fund's closest overlap (`all` is highest first, so the first pair with a fund is its closest).
+  const closest = [], used = new Set();
+  for (const f of funds) {
+    const best = all.find((p) => p.aN === f.n || p.bN === f.n);
+    if (!best) continue;   // no overlap figure with any fund
+    if (best.overlap < OVERLAP_NONE) closest.push({ solo: f.name, n: f.n, overlap: best.overlap });
+    else if (!used.has(best)) { used.add(best); closest.push(best); }
+  }
+  closest.sort((p, q) => q.overlap - p.overlap);
   return {
-    funds: shown.map((f, i) => ({ n: i + 1, name: f.name, isin: f.isin, weightPct: f.weightPct })),
-    matrix: shown.map((a, i) => shown.slice(0, i + 1).map((b, j) => (i === j ? 1 : value(a, b)))),   // lower triangle
-    hidden: funds.length - shown.length,
-    pairs: pairs.sort((p, q) => q.overlap - p.overlap),
+    funds: funds.map(({ n, name, isin, weightPct, category }) => ({ n, name, isin, weightPct, category })),
+    closest,
+    pairs: buckets.high,
+    buckets,
+    distinct: funds.filter((f) => all.every((p) => (p.aN !== f.n && p.bN !== f.n) || p.band === "low")).map((f) => f.name),
     asOn: [...new Set(funds.map((f) => fundHoldings[f.isin]?.asOn).filter(Boolean))].sort().at(-1) ?? null,
   };
+}
+
+/** "high" (≥ OVERLAP_HIGH), "moderate" (OVERLAP_LOW to OVERLAP_HIGH) or "low" (< OVERLAP_LOW). */
+export function overlapBand(v) {
+  return v >= OVERLAP_HIGH ? "high" : v >= OVERLAP_LOW ? "moderate" : "low";
 }
 
 function recommendedModel(allocation, holdingRows, fundData) {

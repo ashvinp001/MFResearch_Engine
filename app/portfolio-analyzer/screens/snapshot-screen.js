@@ -22,7 +22,7 @@ import { printElement } from "../../shared/print.js";
 import { autoDetails, autoNote } from "../report-profile-notes.js";
 import { marketCapBlock } from "../reports/market-cap-view.js";
 
-export function createSnapshotScreen({ portfolio, summary, snapshot, profile = null, store, onChange }) {
+export function createSnapshotScreen({ portfolio, summary, snapshot, profile = null, store, onChange, overlap = null }) {
   // Risk profile and horizon are pre-filled by the Prosperr logic (engine buildReportProfile); editable.
   const auto = autoDetails(profile);
   const settings = store.state.snapshot ??= {
@@ -52,6 +52,7 @@ export function createSnapshotScreen({ portfolio, summary, snapshot, profile = n
         Card({ title: "AMC allocation", eyebrow: "Share of current value", icon: "building", accent: accentAt(3), className: "ds-col-5 site-reveal", children: amcView(snapshot) }),
         Card({ title: "Trailing returns vs benchmark", eyebrow: "Returns (%)", icon: "trend", accent: accentAt(0), className: "ds-col-7 site-reveal", children: returnsView(snapshot) })),
       Card({ title: "Risk analysis", eyebrow: "3-year vs benchmark", icon: "shield", accent: accentAt(1), className: "site-reveal", children: riskView(snapshot) }),
+      overlap ? Card({ title: "Portfolio overlap", eyebrow: "On screen only — not in the one-pager PDF", icon: "layers", accent: accentAt(3), className: "site-reveal", children: overlapView(overlap) }) : null,
       Card({ title: "Observations", eyebrow: "Summary", icon: "file", accent: accentAt(2), className: "site-reveal", children: observationsView }),
       section("Report settings", "Personalise the one-pager", settingsForm(settings, snapshot, portfolio, refresh, profile, auto))));
 
@@ -69,6 +70,35 @@ function section(eyebrow, title, body) {
   return h("section", {},
     h("div", { class: "app-section-head" }, h("div", { class: "ds-eyebrow" }, eyebrow), h("h2", {}, title)),
     body);
+}
+
+// ---------- Portfolio overlap (screen only) ----------
+/**
+ * Lower-triangle matrix: every compared fund numbered, the share of the same stocks for each pair in %, coloured
+ * green (below 25%) / amber (25–50%) / red (50% and above); the fund's number on the diagonal. Wide matrices scroll.
+ */
+function overlapView(o) {
+  const at = new Map([...o.buckets.high, ...o.buckets.moderate, ...o.buckets.low].map((p) => [`${p.aN}-${p.bN}`, p]));
+  const band = (v) => (v >= 0.5 ? "high" : v >= 0.25 ? "moderate" : "low");
+  const rows = o.funds.map((f, i) => h("tr", {},
+    h("th", { scope: "row", class: "snp-ov-name" }, h("span", { class: "snp-ov-n" }, String(f.n)), f.name),
+    ...o.funds.map((g, j) => {
+      if (j > i) return h("td", { class: "snp-ov-empty" });
+      if (i === j) return h("td", { class: "snp-ov-cell is-self" }, String(f.n));
+      const p = at.get(`${Math.min(g.n, f.n)}-${Math.max(g.n, f.n)}`);
+      return p ? h("td", { class: `snp-ov-cell is-${band(p.overlap)}`, title: `${f.name} vs ${g.name}: ${Math.round(p.overlap * 100)}%` }, `${Math.round(p.overlap * 100)}%`)
+        : h("td", { class: "snp-ov-cell" }, DASH);
+    })));
+  return h("div", {},
+    h("div", { class: "snp-ov-wrap" }, h("table", { class: "snp-ov" },
+      h("thead", {}, h("tr", {}, h("th", { class: "snp-ov-name" }, "Fund"), ...o.funds.map((f) => h("th", { class: "snp-ov-col" }, String(f.n))))),
+      h("tbody", {}, rows))),
+    h("div", { class: "snp-ov-keys" },
+      h("span", {}, h("i", { class: "is-low" }), "Low — below 25%"),
+      h("span", {}, h("i", { class: "is-moderate" }), "Moderate — 25% to 50%"),
+      h("span", {}, h("i", { class: "is-high" }), "High — 50% and above"),
+      h("span", { class: "ds-muted" }, `${o.buckets.high.length} high · ${o.buckets.moderate.length} moderate · ${o.buckets.low.length} low pairs${o.asOn ? ` · holdings as disclosed for ${o.asOn}` : ""}`)),
+    h("p", { class: "ds-muted snp-ov-note" }, "Equity and hybrid funds are compared; a fund in several folios or in both plans counts once. Debt, gold & silver funds, funds of funds and arbitrage funds are not compared."));
 }
 
 // ---------- Holdings ----------
@@ -98,7 +128,7 @@ function legendList(items) {
 }
 
 function compositionView({ composition }) {
-  if (!composition) return ChartEmpty({ title: "Asset mix not yet connected", note: "Equity, debt and gold/silver split appears once fund data is connected." });
+  if (!composition) return ChartEmpty({ title: "Asset mix not available", note: "Asset allocation data is not available for the funds held." });
   const items = [
     { label: "Equity", value: composition.equity, color: "var(--navy)" },
     { label: "Debt", value: composition.debt, color: "var(--green)" },
@@ -109,12 +139,12 @@ function compositionView({ composition }) {
 }
 
 function sectorsView({ sectors }) {
-  if (!sectors?.length) return ChartEmpty({ title: "Sector split not yet connected", note: "Top equity sectors appear once fund data is connected." });
+  if (!sectors?.length) return ChartEmpty({ title: "Sector split not available", note: "Sector allocation data is not available for the funds held." });
   return BarChart({ items: sectors.slice(0, 7).map((item) => ({ label: item.sector, value: item.pct, display: `${pct1(item.pct)}%` })), ariaLabel: "Top sectors" });
 }
 
 function marketCapView({ marketCap }) {
-  if (!marketCap) return ChartEmpty({ title: "Market-cap split not yet connected", note: "Large, mid and small cap split appears once fund data is connected." });
+  if (!marketCap) return ChartEmpty({ title: "Market-cap split not available", note: "Market-capitalisation data is not available for the funds held." });
   return marketCapBlock(marketCap, { size: "screen" });
 }
 
@@ -128,7 +158,7 @@ function amcView({ amcAllocation, amcCount }) {
 
 // ---------- Returns & risk ----------
 function returnsView(snapshot) {
-  if (!snapshot.trailingReturns) return ChartEmpty({ title: "Returns not yet connected", note: "1Y / 3Y / 5Y returns vs benchmark appear once NAV history is connected." });
+  if (!snapshot.trailingReturns) return ChartEmpty({ title: "Returns not available", note: "Trailing returns are not available for the current holdings." });
   const byPeriod = new Map(snapshot.trailingReturns.map((r) => [r.period, r]));
   return h("div", { class: "snp-returns" },
     GroupedBars({

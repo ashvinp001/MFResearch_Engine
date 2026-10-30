@@ -73,6 +73,43 @@ export const RECOMMENDATION = Object.freeze({
   }),
 });
 
+// Fund Scorecard — category-wise rating of funds (research/fund-scorecard.js). weights / conditions are the defaults;
+// the owner's saved choice (config/scorecard-settings.json, data-pipeline/scorecard_settings.py) replaces them.
+export const SCORECARD = Object.freeze({
+  version: "1.0",
+  weights: Object.freeze({ returns: 20, riskAdjusted: 20, benchmark: 10, volatility: 15, downside: 15, consistency: 10, quality: 10 }),
+  conditions: Object.freeze({
+    minHistoryYears: 3,      // a fund needs this much NAV history to be rated (new funds / NFOs: Not rated); 2 to 10
+    maxNavAgeDays: 7,        // latest NAV at most this many days before the category's data date
+    minPeers: 5,             // a category is ranked only with at least this many eligible funds; a measure only
+                             // when at least this many eligible funds have it
+    minAumCr: 500,           // AUM (₹ crore, scheme level) at least this; AUM not published → Not rated
+  }),
+  // Risk window: 36 monthly returns (E12); 24 when minHistoryYears is 2, for every fund alike (fund-scorecard.js windowOf).
+  rollingWindows: 24,        // rolling 3Y windows (completed month-ends) for consistency vs the category median
+  minWindows: 12,
+  rolling1yWindows: 36,      // rolling 1Y returns at the last 36 completed month-ends (share positive)
+  calendarYears: 5,          // completed calendar years ranked for the top-half count (E9 quartiles)
+  minCalendarYears: 3,
+  navJumpMax: 0.25,          // a day-on-day NAV move larger than this inside the measured window = data break → Not rated
+  dataBreakYears: 6,         // window checked for data breaks (covers every measure)
+  backtestYears: 3,          // model check: rate the funds as of this many years ago, then measure what followed
+  backtestEdge: Object.freeze({ overCategory: 0.005, overBottom: 0.01 }),   // a "clear edge": Q1 ≥ 0.5 pp p.a. above the category and ≥ 1 pp above Q4
+  // Index funds (research/index-scorecard.js): rated only against funds tracking the same index, on how well they track it.
+  index: Object.freeze({
+    weights: Object.freeze({ trackingDiff: 40, trackingError: 30, trackingConsistency: 15, quality: 15 }),
+    conditions: Object.freeze({
+      minHistoryYears: 1,    // tracking is measured over the last year at least
+      maxNavAgeDays: 7,
+      minPeers: 5,           // funds tracking the same index
+      minAumCr: 100,         // index funds are smaller than active funds; below this the fund is not rated
+    }),
+    tradingDaysPerYear: 252, // tracking error annualised from daily differences (√252)
+    minCommonDays: 200,      // daily fund / index pairs needed in the last year for a tracking error
+    consistencyMonths: 12,   // rolling 1Y tracking difference at the last 12 completed month-ends; steadiness = their spread
+  }),
+});
+
 export const VALIDATION = Object.freeze({
   // Extra allowance (₹) added on top of the precision-derived rounding bound
   // when checking units × NAV ≈ market value for a single row.

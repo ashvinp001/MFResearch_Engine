@@ -1,4 +1,4 @@
-{"source": "AMFI", "dataAsOf": "2026-10-26", "plan": "ETF", "count": 346,
+{"source": "AMFI", "dataAsOf": "2026-10-29", "plan": "ETF", "count": 348,
   "schemes": [
     {"schemeCode":101705,"schemeName":"ICICI Prudential BSE Sensex ETF","amc":"ICICI Prudential Mutual Fund","assetClass":"Other","category":"Other ETFs","isin":"INF346A01034","isinReinvest":null,"active":true},
     {"schemeCode":105463,"schemeName":"UTI - Gold Exchange Traded Fund","amc":"UTI Mutual Fund","assetClass":"Other","category":"Gold ETF","isin":"INF789F1AUX7","isinReinvest":null,"active":true},
@@ -315,7 +315,7 @@
     {"schemeCode":154345,"schemeName":"Groww Nifty Private Bank ETF","amc":"Groww Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF666M01OT5","isinReinvest":null,"active":true},
     {"schemeCode":154347,"schemeName":"Edelweiss Nifty Next 50 ETF","amc":"Edelweiss Mutual Fund","assetClass":"Other","category":"Other ETFs","isin":"INF754K01XF3","isinReinvest":null,"active":true},
     {"schemeCode":154357,"schemeName":"DSP Nifty FMCG ETF","amc":"DSP Mutual Fund","assetClass":"Other","category":"Other ETFs","isin":"INF740KA1ZA4","isinReinvest":null,"active":true},
-    {"schemeCode":154366,"schemeName":"360 ONE MSCI India ETF","amc":"360 ONE Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF579M01BP5","isinReinvest":null,"active":true},
+    {"schemeCode":154366,"schemeName":"360 ONE MSCI India ETF","amc":"360 ONE Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF579M01BP5","isinReinvest":null,"active":true},
     {"schemeCode":154384,"schemeName":"Groww Nifty Smallcap 250 Momentum Quality 100 ETF","amc":"Groww Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF666M01PG9","isinReinvest":null,"active":true},
     {"schemeCode":154404,"schemeName":"ICICI Prudential Nifty Smallcap 250 ETF","amc":"ICICI Prudential Mutual Fund","assetClass":"Other","category":"Other ETFs","isin":"INF109K1A476","isinReinvest":null,"active":true},
     {"schemeCode":154461,"schemeName":"Edelweiss Nifty Metal ETF","amc":"Edelweiss Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF754K01XG1","isinReinvest":null,"active":true},
@@ -344,7 +344,9 @@
     {"schemeCode":154764,"schemeName":"Zerodha Nifty Next 100 ETF","amc":"Zerodha Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF0R8F01257","isinReinvest":null,"active":true},
     {"schemeCode":154765,"schemeName":"HDFC FTSE India Equity ETF","amc":"HDFC Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF179KC1LA2","isinReinvest":null,"active":true},
     {"schemeCode":154768,"schemeName":"DSP BSE Insurance ETF","amc":"DSP Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF740KA1ZR8","isinReinvest":null,"active":true},
+    {"schemeCode":154774,"schemeName":"Aditya Birla Sun Life BSE Total Market ETF","amc":"Aditya Birla Sun Life Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF209KC1746","isinReinvest":null,"active":true},
     {"schemeCode":154789,"schemeName":"Nippon India CRISIL-IBX FAR Gilt ETF","amc":"Nippon India Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF204KC1HS1","isinReinvest":null,"active":true},
-    {"schemeCode":154804,"schemeName":"ICICI Prudential Nifty Pharma ETF","amc":"ICICI Prudential Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF109K1A716","isinReinvest":null,"active":true}
+    {"schemeCode":154804,"schemeName":"ICICI Prudential Nifty Pharma ETF","amc":"ICICI Prudential Mutual Fund","assetClass":"Other","category":"Other ETF","isin":"INF109K1A716","isinReinvest":null,"active":true},
+    {"schemeCode":154826,"schemeName":"SBI BSE India Defence ETF","amc":"SBI Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF200KB1CJ6","isinReinvest":null,"active":true}
   ]
 }

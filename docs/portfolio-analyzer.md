@@ -70,12 +70,17 @@ pdf.js returns loose text fragments with coordinates. These are rebuilt into a t
 ### B. Format detection — `cas/detect-format.js`
 
 Keyword matching misfires because an NSDL CAS mentions CDSL, CAMS and KFintech. Detection is
-therefore an **ordered, structural** rule set over the first `pagesToScan` (3) pages:
+therefore an **ordered, structural** rule set. Rules 1 and 2 read the first `pagesToScan` (3) pages:
 
 1. **MF RTA statement:** per-scheme "Closing Unit Balance" together with "Folio No" → `CAMS_KFINTECH`.
 2. **Depository statement:** depository markers (DP ID / Client ID / BO ID / Demat). The issuer is
    the depository whose full name appears **first** (the letterhead) → `NSDL` or `CDSL`.
-3. Otherwise → `UNSUPPORTED`, which throws `UNSUPPORTED_FORMAT`.
+3. **Long single-scheme statement:** rule 1 again, over the **whole** document.
+   - Why: a CAMS/KFintech CAS with one scheme and years of SIPs can print "Closing Unit Balance" only after many
+     pages of transactions. Seen 28-Oct-2026: one scheme, 452 transactions, closing balance on page 8.
+   - Why it runs after rule 2: a depository statement is never misread, and every earlier statement is detected
+     exactly as before.
+4. Otherwise → `UNSUPPORTED`, which throws `UNSUPPORTED_FORMAT`.
 
 ### C1. CAMS / KFintech parser — `cas/parse-cams-kfintech.js`
 
@@ -218,11 +223,40 @@ rows, then zooms the holdings table, then zooms the whole page content, never be
 trailing periods.
 
 **Detailed model.** Active holdings are grouped by asset class (Equity, Hybrid, Debt, Gold/Silver; Hybrid =
-AMFI's Hybrid class) and listed alphabetically within each group. Group totals are exact. Fund Performance
-(Section 03) lists equity, hybrid and gold/silver funds; debt funds and ETFs are left out. Portfolio Overlap
-(Section 04) is a lower-triangle matrix of the share of the same stocks held by each pair of equity funds (0–100%,
-`fundOverlap` on PulseDB holdings; both plans of a fund count once; up to 12 largest shown) with the pairs at 50%
-or above listed. Returns & Risk is Section 05, Conclusion & Recommendation Section 06. A blended return is shown only when every
+AMFI's Hybrid class) and listed alphabetically within each group.
+- **Group of a fund.** `assetGroup` reads the AMFI class, category and name.
+  - A fund of funds, domestic or overseas (FoF Overseas and overseas ETFs too), goes by what its name says
+    (`fofGroup`). An overseas one is equity unless its name says bonds, treasury or debt. "Income" means debt only
+    when the name does not say "equity", so "Global Equity Income" is equity. Gold- or silver-*mining* funds are
+    equity, not gold. For example, "Diversified Equity All Cap FOF" is equity, "Income Plus Arbitrage FOF" is debt,
+    "Multi-Asset FOF" is hybrid, and a gold or silver FoF is gold/silver.
+  - A fund the name cannot place goes by its look-through holdings (`groupFromMix`): the asset type that makes up 65%
+    or more, otherwise hybrid.
+  - Name patterns are whole-word. "G-Sec" must not match "esG SECtor", which once put an ESG equity FoF under debt.
+- **Unplaced funds.** A fund that still cannot be placed is listed under its own **OTHER** heading. It never appears
+  under the heading above it. Before this fix, an unplaced equity FoF appeared to sit under Gold / Silver. Group totals are exact. Fund Performance
+(Section 03) lists equity, hybrid and gold/silver funds; debt funds and ETFs are left out. A fund appears once there
+even when it is held in several folios (one row per ISIN, because the returns are identical); Regular and Direct
+plans of a scheme are separate rows, because their returns differ. Holdings (Section 01) still lists every folio.
+Market-Cap Breakdown – Fund-wise (Section 02) lists each scheme once. There the Regular and Direct plans count as one
+fund (the same portfolio, so the same large / mid / small split), and several folios merge too. The row shows the
+scheme's name without plan, option or demat wording. The blended row is still value-weighted across every holding.
+With only one fund in the portfolio (in any number of folios), Portfolio Overlap is left out of the preview and the PDF,
+and Returns & Risk and Conclusion become Sections 04 and 05 (`overlapApplies`). Otherwise, Portfolio Overlap
+(Section 04) shows the share of the same stocks held by each pair of funds (0–100%, `fundOverlap` on PulseDB holdings;
+several folios and both plans of a fund count once, under the plan-neutral scheme name). Compared: equity and hybrid
+funds (index funds and equity ETFs included; a hybrid fund's stock portion). Left out: debt, gold & silver, funds of
+funds (owner's rule) and arbitrage funds (hedged stock positions). One page:
+- **Closest overlap for every fund**: a lollipop row per pair on one 0–100% scale (red ≥ 50%, amber 25–50%, green
+  < 25%), highest first; every fund is on the row of the fund it overlaps with most (two funds that are each other's
+  closest share a row); a fund below 10% with every fund gets its own row ("No overlap above 8% with any fund").
+  Above 16 rows the chart runs in two columns. Tested with 50 funds (45 rows) on one A4 page;
+- Overlap Summary: one compact box per bucket with a single comment (what it means for the client, plus the stocks
+  most often held in common for High / Moderate) and the pairs' names with their % (High up to 10, Moderate up to 8,
+  the rest counted). Low lists the funds with low overlap against every other fund.
+- The chart, then the summary, are scaled down (to 60% / 82% at most) until both fit; only beyond that does the summary
+  continue on the next page.
+Returns & Risk is Section 05, Conclusion & Recommendation Section 06. A blended return is shown only when every
 fund has that period. Without fund data, the holdings form one ungrouped list and analytics are `null`.
 
 **Fund data (Phase 2).** `getFundData(portfolio)` currently returns `null`. Its `FundData` /

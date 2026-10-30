@@ -5,7 +5,8 @@
  *         benchmark's monthly returns and 3Y CAGR (same months). Rf from config RISK.riskFreeRate.
  * Output: riskMetrics({ monthly, cagr3y, benchmarkMonthly?, benchmarkCagr3y? }) →
  *           { stdDev, sharpe, sortino, beta, alpha, observations } (ratios; null when not computable)
- *         or null when there are fewer than RISK.minObservations monthly returns.
+ *         or null when there are fewer than RISK.minObservations monthly returns (minObservations overrides it for a
+ *         shorter window, e.g. the Fund Scorecard's 24-month window; cagr3y is then that window's CAGR).
  *  - monthEnds(lastMonthEnd, count) → ["YYYY-MM-DD", …] the last calendar day of `count` months, oldest first
  *  - lastCompletedMonthEnd(anchorDate) → last calendar day of the month before the anchor's month
  *
@@ -39,8 +40,8 @@ function sampleCovariance(xs, ys) {
   return xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / (xs.length - 1);
 }
 
-export function riskMetrics({ monthly, cagr3y, benchmarkMonthly = null, benchmarkCagr3y = null, riskFreeRate = RISK.riskFreeRate }) {
-  if (!Array.isArray(monthly) || monthly.length < RISK.minObservations || monthly.some((r) => !Number.isFinite(r))) return null;
+export function riskMetrics({ monthly, cagr3y, benchmarkMonthly = null, benchmarkCagr3y = null, riskFreeRate = RISK.riskFreeRate, minObservations = RISK.minObservations }) {
+  if (!Array.isArray(monthly) || monthly.length < minObservations || monthly.some((r) => !Number.isFinite(r))) return null;
   const stdDev = Math.sqrt(sampleCovariance(monthly, monthly)) * Math.sqrt(12);
   const rfMonthly = (1 + riskFreeRate) ** (1 / 12) - 1;
   const downside = Math.sqrt(mean(monthly.map((r) => Math.min(r - rfMonthly, 0) ** 2))) * Math.sqrt(12);

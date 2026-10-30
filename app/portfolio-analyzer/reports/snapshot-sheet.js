@@ -148,12 +148,12 @@ function compositionList({ composition }) {
 }
 
 function sectorList({ sectors }) {
-  if (!sectors?.length) return h("p", { class: "snap-pending" }, "Sector split appears once fund data is connected.");
+  if (!sectors?.length) return h("p", { class: "snap-pending" }, "Sector allocation data is not available for the funds held.");
   return listRows(sectors.slice(0, 7).map((item) => ({ label: item.sector, value: pct1(item.pct) })));
 }
 
 function marketCapList({ marketCap }) {
-  if (!marketCap) return h("p", { class: "snap-pending" }, "Market-cap split appears once fund data is connected.");
+  if (!marketCap) return h("p", { class: "snap-pending" }, "Market-capitalisation data is not available for the funds held.");
   return marketCapBlock(marketCap, { size: "print" });
 }
 
@@ -188,12 +188,12 @@ function returnsBox(snapshot) {
     h("div", { class: "snap-insight" }, h("div", { class: "snap-insight-title" }, "KEY INSIGHT"), insight));
 }
 
-/** "Portfolio returns: 1Y +12.3% · 3Y +15.1% p.a. · 5Y —. Benchmark comparison appears once index data is connected." */
+/** "Portfolio returns: 1Y +12.3% · 3Y +15.1% p.a. · 5Y —." (shown when no benchmark comparison can be made). */
 export function portfolioReturnsLine(snapshot) {
   const rows = snapshot.trailingReturns ?? [];
-  if (!rows.some((r) => Number.isFinite(r.portfolio))) return "Trailing returns appear here once NAV history is available for the funds.";
+  if (!rows.some((r) => Number.isFinite(r.portfolio))) return "Trailing returns are not available for the current holdings.";
   const parts = rows.map((r) => `${r.period} ${Number.isFinite(r.portfolio) ? `${signedPct(r.portfolio, 1)}${r.period === "1Y" ? "" : " p.a."}` : "—"}`);
-  return `Portfolio returns: ${parts.join(" · ")}. Benchmark comparison appears once index data is connected.`;
+  return `Portfolio returns: ${parts.join(" · ")}. A benchmark comparison is shown when funds with a verified benchmark hold at least 80% of the portfolio value.`;
 }
 
 function riskTable({ risk }) {

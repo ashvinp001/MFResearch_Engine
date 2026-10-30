@@ -22,7 +22,10 @@ import { anchorNav, navOn, navSeries, periodStart, trailingReturn } from "../cal
 import { lastCompletedMonthEnd, monthEnds, riskMetrics } from "../calculation-engine/analytics/risk.js";
 
 const DEFAULT_GROUPS = ["Direct|Equity|Large Cap Fund", "Direct|Equity|Contra Fund", "Regular|Equity|Small Cap Fund",
-  "Regular|Debt|Corporate Bond Fund", "Direct|Hybrid|Arbitrage Fund", "Direct|Debt|Liquid Fund"];
+  "Regular|Debt|Corporate Bond Fund", "Direct|Hybrid|Arbitrage Fund", "Direct|Debt|Liquid Fund",
+  // groups whose benchmarks we build ourselves (data-pipeline/benchmark_blends.py)
+  "Regular|Hybrid|Balanced Advantage / Dynamic Asset Allocation", "Direct|Hybrid|Equity Savings", "Regular|Hybrid|Multi Asset Allocation",
+  "ETF|Other|Gold ETF", "Regular|Other|FoF Overseas"];
 const groups = new URLSearchParams(location.search).get("groups")?.split(";") ?? DEFAULT_GROUPS;
 const TOL = 0.0006;   // the Python file stores percent figures rounded to 4 decimals
 const lines = [];
@@ -36,6 +39,7 @@ function same(label, a, b, tol = TOL) {
   if (!ok) { problems++; lines.push(`  MISMATCH ${label}: python ${b} vs engine ${a}`); }
 }
 
+const withBenchmark = [];
 const lists = await Promise.all(["regular", "direct", "etf"].map((f) => json(`../data/schemes/${f}.json`)));
 const schemes = lists.flatMap((l) => l.schemes.map((s) => ({ ...s, plan: l.plan })));
 
@@ -107,7 +111,28 @@ for (const key of groups) {
     same(`${c} consistency`, cons, p.consistency, 0.006);
   }
   lines.push(`${key}: ${members.length} funds checked (${codes.length - members.length} active funds without stats: stale NAV)`);
+  for (const c of members) if (stats.funds[c].benchmark) withBenchmark.push({ code: c, navDate: stats.funds[c].navDate, bm: stats.funds[c].benchmark });
 }
+
+// Each fund's own benchmark (E15.5.13 6a): 1Y / 3Y / 5Y by E2 from the stored benchmark prices, anchored at the price on
+// the fund's ANCHOR date by E1 NEAREST-PREVIOUS — the same figures the peer statistics carry.
+const bmCodes = [...new Set(withBenchmark.map((x) => x.bm.code))];
+const bmSeries = {};
+for (let i = 0; i < bmCodes.length; i += 80) {
+  const body = await json(`/api/benchmark-history?codes=${bmCodes.slice(i, i + 80).join(",")}&years=7`);
+  for (const [code, s] of Object.entries(body.series)) bmSeries[code] = navSeries({ dates: s.dates, navs: s.values });
+}
+for (const { code, navDate, bm } of withBenchmark) {
+  const series = bmSeries[bm.code];
+  const anchor = series ? navOn(series, navDate, "previous") : null;
+  same(`${code} benchmark ${bm.code} anchor`, anchor ? 1 : 0, 1, 0);
+  if (!anchor) continue;
+  same(`${code} benchmark ${bm.code} anchorDate`, anchor.date === bm.anchorDate ? 1 : 0, 1, 0);
+  same(`${code} benchmark ${bm.code} r1y`, pct(trailingReturn(series, { months: 12 }, anchor)), bm.r1y);
+  same(`${code} benchmark ${bm.code} r3y`, pct(trailingReturn(series, { years: 3 }, anchor)), bm.r3y);
+  same(`${code} benchmark ${bm.code} r5y`, pct(trailingReturn(series, { years: 5 }, anchor)), bm.r5y);
+}
+lines.push(`Benchmarks: ${withBenchmark.length} funds' benchmark figures checked (${bmCodes.length} indices, ${bmCodes.filter((c) => c.startsWith("SB")).length} built by us)`);
 lines.unshift(`RESULT: ${problems ? "FAIL" : "PASS"} — ${checks} figures compared, ${problems} mismatches`);
 document.getElementById("results").textContent = lines.join("\n");
 document.body.dataset.done = problems ? "fail" : "pass";

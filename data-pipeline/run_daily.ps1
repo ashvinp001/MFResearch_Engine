@@ -34,6 +34,10 @@ if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
 "=== $(Get-Date -Format s) peer statistics ===" | Out-File -FilePath $log -Append -Encoding utf8
 & $python -u (Join-Path $PSScriptRoot "peer_stats.py") 2>&1 | ForEach-Object { "$_" } | Out-File -FilePath $log -Append -Encoding utf8
 if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
+# Fund details (AUM, inception, manager) from PulseDB for the Fund Scorecard. A failure keeps the previous file.
+"=== $(Get-Date -Format s) fund metadata ===" | Out-File -FilePath $log -Append -Encoding utf8
+& $python -u (Join-Path $PSScriptRoot "fund_metadata.py") 2>&1 | ForEach-Object { "$_" } | Out-File -FilePath $log -Append -Encoding utf8
+if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
 "=== $(Get-Date -Format s) finished, exit code $code ===" | Out-File -FilePath $log -Append -Encoding utf8
 
 Get-ChildItem $logDir -Filter "daily-*.log" | Sort-Object Name -Descending | Select-Object -Skip 60 | Remove-Item -Force

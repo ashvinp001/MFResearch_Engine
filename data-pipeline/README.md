@@ -39,7 +39,7 @@ zstd-compressed; scheme code, name, AMC, plan, category, ISIN and source in the 
 
 | Rule | Detail |
 |---|---|
-| Sources | AMFI daily NAV file (primary) and Scheme Master (fills blank Plan/Option columns, flags special plans) |
+| Sources | AMFI daily NAV file (primary) and Scheme Master (fills blank Plan/Option columns, flags special plans). When **both** leave a scheme without a plan or option (e.g. Motilal Oswal BSE Enhanced Value Index Fund, 150518 / 150519), PulseDB's plan / option for the same scheme code fills it — Growth of a Direct / Regular ("Broker") plan only, never over a value AMFI prints, never duplicating an AMFI-stated line; listed in the report as `plansFromPulse` (20 on 30-Oct-2026). Without Pulse the build runs on AMFI alone |
 | Key | AMFI **Scheme Code** (permanent); ISIN check-digit verified |
 | Types | Open-ended Equity, Hybrid, Debt, Other (Index, ETF, FoF, Gold/Silver), Solution Oriented. No Life Cycle, close-ended or interval schemes |
 | Plans | **Regular and Direct** (separate files); ETFs single-class |
@@ -104,6 +104,7 @@ benchmark-data/
 | Daily | mapping refreshed (changes reported) · new benchmarks collected in full · new prices from the same history endpoint (the per-day list also fills weekends / holidays), cross-checked on the latest day, merged (genuine differences corrected and flagged) · a rejected benchmark is listed, not retried |
 | Verified | 1Y / 3Y / 5Y computed from the stored series (E2) match Pulse's own trailing returns for 20 benchmarks (1Y exact, 3Y / 5Y within 0.02 pp) |
 | Not used | Pulse-made multi-index blends (weights in the name, `benchmark_data.is_composite`): stored, but not used — they do not follow their stated weights (checked 22-Oct-2026; MF_Calculation_Engine.md E15.5.13 6b). `peer_stats.py` gives those funds `benchmark: null` and `benchmarkExcluded` with the reason |
+| Our own (SB…) | `benchmark_blends.py`, run inside `benchmark_daily.py`: every Pulse blend that can be built exactly (BAF, Multi Asset, Equity Savings, Balanced Hybrid, …) rebuilt from its components (E7.1), SBGOLD (Gold BeES NAV) for gold funds, SBGS gold+silver 50:50, OB202 for silver funds, S&P 500 for overseas funds. Stored under `prices/sb/`; `mapping/funds.json` carries `rule`, `pulseCode` and `synthetic` (components). A blend that cannot be built exactly is listed in the daily report (`rules.notBuilt`) |
 | Website | `GET /api/benchmark-history?codes=OB48,…` (`benchmark_api.py`): daily prices, last 5 years, for the reports' benchmark lines and the blended portfolio benchmark |
 
 **Supabase CDN:** an overwritten object can be served from the CDN's earlier copy for a while (seen 22-Oct-2026),
@@ -138,6 +139,7 @@ returns and risk from these (MF_Calculation_Engine.md E15.5.8–E15.5.9).
 | `holdings_api.py` | Fund holdings for the website (Supabase-cached), called by the local server |
 | `peer_stats.py` · `peer_stats_api.py` | Daily peer statistics (Recommendation_Logic.md) · served to the website |
 | `benchmark_data.py` | Benchmark mapping rules, price checks, bucket layout, Parquet build / read |
+| `benchmark_blends.py` | Our own benchmarks and the category rules (gold / silver / overseas / BAF / Multi Asset) |
 | `collect_benchmarks.py` · `benchmark_daily.py` | One-time benchmark collection (`--sheet`, `--limit`, `--refresh`) · the daily benchmark update |
 | `xlsx_reader.py` | Reads one sheet of an .xlsx (standard library only) — for the owner's reference workbook |
 | `run_daily.ps1` · `schedule_daily.ps1` | Run the daily job with a log · register it in Windows Task Scheduler |

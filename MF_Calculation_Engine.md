@@ -272,10 +272,11 @@ integrity    { status: ok | needs_review, checks[] { name, passed, detail }, war
 
 **A. Positional extraction (`cas/extract-text.js`).** pdf.js text items keep x, y and font height. Items whose baselines differ by ≤ fontHeight × 0.5 form one row; adjacent items closer than fontHeight × 0.35 merge into one cell; runs separated by wide spaces are split. Rows top→bottom, cells left→right. Fewer than 20 text items in the file → `NO_TEXT_LAYER` (scanned PDF). Errors are typed: `PASSWORD_REQUIRED`, `PASSWORD_INCORRECT`, `UNREADABLE_PDF`, `NO_TEXT_LAYER`, `UNSUPPORTED_FORMAT`. `probePdf` checks for a password before analysis.
 
-**B. Format detection (`cas/detect-format.js`) — ordered, structural rules** over the first 3 pages:
-1. "Closing Unit Balance" AND "Folio No" → `CAMS_KFINTECH`.
-2. A depository marker (DP ID / Client ID / BO ID / Demat) → `NSDL` or `CDSL`, whichever depository's full name appears FIRST (the letterhead).
-3. Otherwise `UNSUPPORTED`.
+**B. Format detection (`cas/detect-format.js`) — ordered, structural rules**:
+1. Over the first 3 pages: "Closing Unit Balance" AND "Folio No" → `CAMS_KFINTECH`.
+2. Over the first 3 pages: a depository marker (DP ID / Client ID / BO ID / Demat) → `NSDL` or `CDSL`, whichever depository's full name appears FIRST (the letterhead).
+3. **Long single-scheme statements — rule 1 over the WHOLE document.** A CAMS/KFintech CAS holding one scheme with years of SIPs prints its transactions for many pages, so "Closing Unit Balance" can first appear late (seen 28-Oct-2026: one SBI ELSS scheme, 452 transactions, 8 pages, closing balance on page 8). When rules 1–2 find nothing, rule 1 is applied to every page. It runs only after rule 2, so a depository statement (which can list MF folios later on) is never misread as CAMS, and every statement detected before is detected exactly as before. Test: *"CAMS: one scheme with years of SIPs — Closing Unit Balance only on page 5"*.
+4. Otherwise `UNSUPPORTED`.
 
 **C. CAMS / KFintech parser (`cas/parse-cams-kfintech.js`).** Layout AMC → Folio → Scheme; each scheme block is anchored on its ISIN; values are read by LABEL ("Closing Unit Balance:", "NAV on <date>:", "Total Cost Value", "Market Value on <date>:"), never by position.
 - **Wrapped ISIN:** "ISIN:" at line end with the code on the next line, OR the code itself split across lines (e.g. `INF917K01QA` / `1(Advisor…)`) is rejoined — accepted ONLY if the 12-character code passes the ISIN check digit (E15.4).
@@ -581,8 +582,23 @@ at most 7 days before AMFI's data date), each at its own ANCHOR T, and published
 6b. **Excluded benchmarks:** a Pulse-made multi-index blend (weights in its name, e.g. "NIFTY 50 Index(50%)+CRISIL
    Short Term Index(50%)") is not used anywhere — checked 22-Oct-2026, these series do not follow their stated
    weights (AB124 1Y −9.07% vs −3.35% rebuilt from its components by E7; OHB30 −7.83% vs +2.71%; OHB76 −8.31% vs
-   −2.42%). 297 funds / 52 blends. Official single indices (incl. CRISIL Hybrid 35+65 and NIFTY 50 Hybrid Composite
-   50:50) are used. Next step (owner's approval): build those blends from their component indices by E7.
+   −2.42%). Official single indices (incl. CRISIL Hybrid 35+65 and NIFTY 50 Hybrid Composite 50:50) are used.
+6b-1. **Our own benchmarks (29-Oct-2026, owner's request; `data-pipeline/benchmark_blends.py`):** built daily by
+   E7.1 from stored indices and stored like any index (codes SB…):
+   - **Every fund with a Pulse blend** (Balanced Advantage, Multi Asset, Equity Savings, Balanced Hybrid, Aggressive
+     Hybrid, their FoFs, …): the blend rebuilt from its component indices with its stated weights (e.g. SBAB124 =
+     NIFTY 50 50% + CRISIL Short Term Bond 50%; SBOHB30 = NIFTY 50 Arbitrage 75% + NIFTY 50 25%). A blend with a
+     component we do not store (iCOMDEX, CRISIL Hybrid 50+50, BSE Oil & Gas, "gold and silver" as one) or weights that
+     do not add up to 100% is not approximated — the fund shows no benchmark (18 schemes on 29-Oct-2026).
+     Verified 29-Oct-2026: all 48 stored blends rebuilt independently from the component prices (max relative
+     difference 6e-9); tests/peer-stats-check.html recomputes every benchmark figure with the engine (0 mismatches).
+   - **Gold funds** (gold ETFs, gold FoFs): SBGOLD = Nippon India ETF Gold BeES NAV (AMFI). Pulse's gold price OB26
+     is not used: one-day jumps that reverse (+14.9% / −12.9% / +13.7% on 1–3 Jun 2020, +16.7% on 16-Oct-2023).
+     Gold BeES runs about its expense ratio (~0.8% a year) below the physical price.
+   - **Silver funds:** OB202 Price of Silver. **Gold-and-silver funds:** SBGS = Gold 50% + Silver 50%.
+   - **FoF Overseas / ETFs investing overseas:** S&P 500 (OB94); NASDAQ funds keep NASDAQ 100, Hang Seng funds Hang
+     Seng TECH; overseas bond / treasury funds stay as Pulse maps them.
+   Mining-equity funds (World Gold Mining) are not gold-price funds; "Equity Income" is not a bond fund.
 6c. **Sector check:** the sector index (or, for an unmapped ETF, its own NAV when that history has no break) vs
    NIFTY 500 (OB56) at the same anchor — see Recommendation_Logic.md §4.2a.
 7. **ELSS locked units:** min(current units, Σ units of transactions with positive units dated after

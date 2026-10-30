@@ -13,6 +13,7 @@
  *  Rule 2 — Depository statement: prints depository-account markers
  *           (DP ID / Client ID / BO ID / Demat). The issuer is the depository
  *           whose full name appears FIRST in the document (the letterhead).
+ *  Rule 1 once more on the WHOLE document (a single scheme with years of SIPs prints its closing balance late).
  *  Otherwise UNSUPPORTED.
  */
 
@@ -33,10 +34,8 @@ const ISSUER_NAMES = [
 ];
 
 export function detectFormat(doc) {
-  const text = doc.pages
-    .slice(0, DETECTION.pagesToScan)
-    .flatMap((page) => page.rows.map((row) => row.text))
-    .join("\n");
+  const pageText = (pages) => pages.flatMap((page) => page.rows.map((row) => row.text)).join("\n");
+  const text = pageText(doc.pages.slice(0, DETECTION.pagesToScan));
 
   if (RTA_STRUCTURE.every((pattern) => pattern.test(text))) {
     return CAS_FORMAT.CAMS_KFINTECH;
@@ -48,6 +47,13 @@ export function detectFormat(doc) {
       .filter(({ index }) => index >= 0)
       .sort((p, q) => p.index - q.index)[0];
     if (firstIssuer) return firstIssuer.format;
+  }
+
+  // Rule 1 again on the whole statement, only once Rule 2 found no depository statement: one scheme with years of SIPs
+  // can print its "Closing Unit Balance" only after many pages of transactions (seen: a single-fund CAMS CAS of 8
+  // pages, closing balance on page 8).
+  if (RTA_STRUCTURE.every((pattern) => pattern.test(pageText(doc.pages)))) {
+    return CAS_FORMAT.CAMS_KFINTECH;
   }
 
   return CAS_FORMAT.UNSUPPORTED;

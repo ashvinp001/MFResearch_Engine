@@ -9,6 +9,8 @@ Keys (see .env.example):
   MFAPI_BASE_URL, AMFI_NAV_URL, AMFI_SCHEME_MASTER_URL,
   AMFI_NAV_HISTORY_URL                                          — public data sources (no key)
   PULSE_BASE_URL, PULSE_PARTNER, PULSE_KEY                      — Pulse Labs fund analytics API
+  SCORECARD_PASSWORD_HASH                                       — Fund Scorecard edit password (hash only; set it with
+                                                                  python data-pipeline/scorecard_settings.py set-password)
 """
 
 from __future__ import annotations
@@ -28,8 +30,8 @@ DEFAULTS = {
     "AMFI_NAV_HISTORY_URL": "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt={start}&todt={end}",
     "PULSE_BASE_URL": "https://pulsedb.pulselabs.co.in/rest/api/v1",
 }
-SECRET_KEYS = {"SUPABASE_SERVICE_KEY", "PULSE_PARTNER", "PULSE_KEY"}
-OPTIONAL_KEYS = {"SUPABASE_URL", "PULSE_PARTNER", "PULSE_KEY"}  # no default; required only where used
+SECRET_KEYS = {"SUPABASE_SERVICE_KEY", "PULSE_PARTNER", "PULSE_KEY", "SCORECARD_PASSWORD_HASH"}
+OPTIONAL_KEYS = {"SUPABASE_URL", "PULSE_PARTNER", "PULSE_KEY", "SCORECARD_PASSWORD_HASH"}  # no default; required only where used
 
 
 class SettingsError(RuntimeError):

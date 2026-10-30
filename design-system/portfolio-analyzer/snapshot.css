@@ -187,6 +187,26 @@
 .snp-risk-row span { font-size: 13px; color: var(--text-muted); }
 .snp-risk-values { display: flex; gap: 14px; font-family: var(--font-display); font-weight: 700; }
 
+/* Portfolio overlap matrix (screen only): lower triangle, green / amber / red by band, scrolls when wide */
+.snp-ov-wrap { overflow-x: auto; }
+.snp-ov { border-collapse: separate; border-spacing: 3px; font-size: 12px; min-width: 100%; }
+.snp-ov th { font-weight: 700; color: var(--text-secondary); }
+.snp-ov thead th.snp-ov-col { text-align: center; font-family: var(--font-display); font-size: 11px; min-width: 38px; }
+.snp-ov .snp-ov-name { text-align: left; white-space: nowrap; padding-right: 12px; font-weight: 600; color: var(--text-primary); }
+.snp-ov-n { display: inline-block; min-width: 20px; color: var(--navy); font-family: var(--font-display); font-weight: 700; }
+.snp-ov-cell { height: 28px; min-width: 38px; text-align: center; border-radius: 4px; font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--surface-alt); color: var(--text-muted); }
+.snp-ov-cell.is-self { background: var(--navy); color: var(--text-on-primary); }
+.snp-ov-cell.is-low { background: color-mix(in srgb, var(--green) 18%, var(--surface)); color: color-mix(in srgb, var(--green) 75%, var(--text-primary)); }
+.snp-ov-cell.is-moderate { background: color-mix(in srgb, var(--amber) 22%, var(--surface)); color: color-mix(in srgb, var(--amber) 80%, var(--text-primary)); }
+.snp-ov-cell.is-high { background: color-mix(in srgb, var(--red) 24%, var(--surface)); color: color-mix(in srgb, var(--red) 80%, var(--text-primary)); }
+.snp-ov-empty { background: transparent; }
+.snp-ov-keys { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+.snp-ov-keys i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
+.snp-ov-keys i.is-low { background: color-mix(in srgb, var(--green) 45%, var(--surface)); }
+.snp-ov-keys i.is-moderate { background: color-mix(in srgb, var(--amber) 50%, var(--surface)); }
+.snp-ov-keys i.is-high { background: color-mix(in srgb, var(--red) 50%, var(--surface)); }
+.snp-ov-note { margin: 8px 0 0; font-size: 12px; }
 .snp-obs { background: var(--surface-tint-green); border-left: 4px solid var(--green); border-radius: var(--r-md); padding: 14px 18px; color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; }
 
 

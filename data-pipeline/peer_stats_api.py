@@ -4,7 +4,7 @@ Usage (by serve.ps1):  python data-pipeline/peer_stats_api.py 122639 100119 …
 Output (stdout, JSON): { "asOf", "generatedAt", "method", "funds": { "<code>": {...} },
                          "groups": { "<plan|assetClass|category>": {...} }, "missing": [codes without stats] }
 Reads stats/peer-stats.json (written by peer_stats.py after each daily update) and returns only the
-requested funds and their peer groups. The Supabase key is read from .env here and never leaves the server.
+requested funds and their peer groups (the file is reused locally for 5 minutes, verified_cache). The Supabase key is read from .env here and never leaves the server.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import settings  # noqa: E402
 from peer_stats import STATS_PATH  # noqa: E402
 from supabase_storage import StorageClient  # noqa: E402
+from verified_cache import cached_manifest  # noqa: E402
 
 MAX_CODES = 80
 
@@ -27,7 +28,8 @@ def main(argv: list[str]) -> int:
     if not codes or len(codes) > MAX_CODES or len(codes) != len(set(argv)):
         print(json.dumps({"error": "bad scheme code list"}))
         return 2
-    stats = StorageClient(settings.supabase()).download_json(STATS_PATH)
+    connection = settings.supabase()
+    stats = cached_manifest(StorageClient(connection), STATS_PATH, connection.get("bucket") or "mf-data")   # reused for 5 minutes
     if not stats:
         print(json.dumps({"error": f"{STATS_PATH} not found"}))
         return 1

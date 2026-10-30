@@ -304,6 +304,9 @@ export function mountPortfolioAnalyzer(container) {
       snapshot: buildSnapshot(portfolio, fundData),
       profile: session.profile,
       store: session.store,
+      // Portfolio Overlap, on screen only (not in the one-pager PDF): the Detailed report's own overlap model.
+      overlap: fundData?.autoInputs?.fundHoldings
+        ? buildDetailedReport({ portfolio, fundData, fundHoldings: fundData.autoInputs.fundHoldings }).overlap : null,
     });
     view.replaceChildren(reportSwitch("snapshot"), snapshotScreen.element, actionBar.element);
     actionBar.update({

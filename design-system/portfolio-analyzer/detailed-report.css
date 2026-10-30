@@ -91,6 +91,8 @@
 .dr-table td.down, .dr-table .down { color: var(--red); }
 
 /* FUND · WT % · INVESTED · CURRENT · PROFIT · RECOMMENDATION */
+/* Overview Holding: the whole table framed in the report's blue (also each part when it continues on a new page) */
+.dr-holdings { border: 2px solid var(--navy); }
 .dr-holdings th:nth-child(1) { width: 44%; }
 .dr-holdings th:nth-child(2) { width: 7%; }
 .dr-holdings th:nth-child(3), .dr-holdings th:nth-child(4) { width: 13.5%; }
@@ -107,6 +109,8 @@
 .dr-group.is-debt td:first-child { box-shadow: inset 4px 0 0 var(--green); color: var(--green); }
 .dr-group.is-goldSilver td { background: var(--surface-tint-blue); }
 .dr-group.is-goldSilver td:first-child { box-shadow: inset 4px 0 0 var(--steel); color: var(--steel); }
+.dr-group.is-other td { background: var(--surface-tint-amber); }
+.dr-group.is-other td:first-child { box-shadow: inset 4px 0 0 var(--amber); color: var(--amber); }
 .dr-total td { background: var(--surface-tint-blue); border-top: 2px solid var(--navy); border-bottom: 2px solid var(--navy); font-weight: 700; color: var(--navy); font-family: var(--font-display); font-size: 10px; }
 .dr-total td:first-child { border-left: 2px solid var(--navy); }
 .dr-total td:last-child { border-right: 2px solid var(--navy); }
@@ -170,25 +174,60 @@
 .dr-perf-bench td i { display: inline-block; width: 3px; height: 10px; border-radius: 1px; background: var(--blue); margin-right: 8px; vertical-align: -1px; }
 .dr-perf-bench td.num { font-size: 10px; color: var(--blue); }
 
-/* Section 04 — Portfolio Overlap (lower-triangle matrix, shaded by overlap) */
-.dr-overlap { table-layout: fixed; border-collapse: separate; border-spacing: 2px; margin-top: 12px; }
-.dr-overlap th { background: transparent !important; color: var(--navy) !important; font-family: var(--font-display); font-size: 9.5px; font-weight: 700; padding: 4px 2px; border: none !important; }
-.dr-overlap th.name { width: 36%; text-align: left; padding-left: 0; }
-.dr-overlap th.num { text-align: center; }
-.dr-overlap td { border: none !important; padding: 0; height: 28px; }
-.dr-overlap td.name { padding: 0 8px 0 0; font-size: 9.5px; font-weight: 600; color: var(--text-primary); line-height: 1.25; }
-.dr-ov-n { display: inline-block; min-width: 16px; margin-right: 4px; font-family: var(--font-display); font-weight: 700; color: var(--navy); }
-.dr-ov-cell { text-align: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; color: var(--navy); border-radius: 2px; }
-.dr-ov-cell.is-dark, .dr-ov-cell.is-self { color: #fff; }
-.dr-ov-empty { background: transparent; }
-/* Breathing room under the matrix: key, note and the pairs list sit clearly apart from it. */
-.dr-ov-keys { margin-top: 22px; }
-.dr-ov-note { margin-top: 12px; }
-.dr-ov-pairs { margin-top: 30px; }
-.dr-ov-pairs ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
-.dr-ov-pairs li { display: flex; gap: 12px; align-items: baseline; padding: 6px 10px; border-left: 3px solid var(--navy); background: var(--surface-tint-blue); border-radius: 4px; font-size: 10px; color: var(--text-primary); }
-.dr-ov-pairs li strong { font-family: var(--font-display); color: var(--navy); min-width: 30px; }
-.dr-ov-pairs p { margin: 6px 0 0; font-size: 10px; color: var(--text-secondary); }
+/* Section 04 — Portfolio Overlap: summary tiles, a red / amber / green matrix, then the three buckets with insights */
+.dr-page {
+  --ov-high: #b4382e; --ov-high-bg: #f9dcd8; --ov-high-deep: #c0453b;
+  --ov-mod: #94600f; --ov-mod-bg: #fbeacb;
+  --ov-low: #2f7a3b; --ov-low-bg: #e1f1dd;
+}
+/* Closest overlap for every fund: one lollipop row per pair on a 0–100% scale; two columns for long lists */
+.dr-ovc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.dr-ovc-head .dr-h { margin: 0; }
+.dr-ovc-head span { font-size: 8.5px; color: var(--text-secondary); }
+.dr-ovc-cols { display: grid; gap: 0 22px; margin-top: 4px; }
+.dr-ovc-cols.is-two { grid-template-columns: 1fr 1fr; }
+.dr-ovc-row { display: grid; grid-template-columns: 48% 1fr; gap: 8px; align-items: center; min-height: 24px; border-bottom: 1px solid var(--rule); font-size: 9.2px; }
+.dr-ovc-cols.is-two .dr-ovc-row { grid-template-columns: 52% 1fr; font-size: 8.6px; min-height: 26px; }
+.dr-ovc-row.is-axis { min-height: 14px; border-bottom-color: var(--border-strong); }
+.dr-ovc-names { min-width: 0; line-height: 1.22; padding: 3px 0; }
+.dr-ovc-names b { font-weight: 600; color: var(--text-primary); }
+.dr-ovc-names em { font-style: normal; font-size: 0.85em; color: var(--text-muted); margin: 0 4px; }
+.dr-ovc-ticks { position: relative; height: 12px; font-family: var(--font-display); font-size: 7.5px; color: var(--text-secondary); }
+.dr-ovc-ticks span { position: absolute; transform: translateX(-50%); }
+.dr-ovc-ticks span:first-child { transform: none; }
+.dr-ovc-ticks span:last-child { transform: translateX(-100%); }
+.dr-ovc-track { position: relative; align-self: stretch; min-height: 22px; }
+.dr-ovc-stick { position: absolute; left: 0; top: 50%; height: 2px; margin-top: -1px; border-radius: 1px; background: var(--ov-c); }
+.dr-ovc-dot { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #fff; transform: translate(-50%, -50%); background: var(--ov-c); }
+.dr-ovc-val { position: absolute; top: 50%; transform: translateY(-50%); margin-left: 7px; padding: 0 2px; background: #fff; font-family: var(--font-display); font-size: 8.8px; font-weight: 700; color: var(--ov-c); white-space: nowrap; line-height: 1.2; }
+.dr-ovc-val.is-inside { margin: 0 7px 0 0; }
+.dr-ovc-stick.is-high, .dr-ovc-dot.is-high, .dr-ovc-val.is-high { --ov-c: var(--ov-high); }
+.dr-ovc-stick.is-moderate, .dr-ovc-dot.is-moderate, .dr-ovc-val.is-moderate { --ov-c: var(--ov-mod); }
+.dr-ovc-stick.is-low, .dr-ovc-dot.is-low, .dr-ovc-val.is-low { --ov-c: var(--ov-low); }
+.dr-ov-key { border-radius: 2px; }
+.dr-ov-key.is-low { background: var(--ov-low-bg); box-shadow: inset 0 0 0 1px var(--ov-low); }
+.dr-ov-key.is-moderate { background: var(--ov-mod-bg); box-shadow: inset 0 0 0 1px var(--ov-mod); }
+.dr-ov-key.is-high { background: var(--ov-high-bg); box-shadow: inset 0 0 0 1px var(--ov-high); }
+.dr-ov-keys { margin-top: 14px; }
+.dr-ov-note { margin-top: 10px; }
+
+/* Overlap summary: one compact box per bucket — a comment for the bucket, then the pairs' names */
+.dr-ovb-h { margin-top: 22px; }
+.dr-ovb { margin-top: 8px; padding: 9px 12px; border-radius: 6px; border-left: 4px solid var(--ov-c); background: var(--ov-bg); }
+.dr-ovb.is-high { --ov-c: var(--ov-high); --ov-bg: var(--ov-high-bg); }
+.dr-ovb.is-moderate { --ov-c: var(--ov-mod); --ov-bg: var(--ov-mod-bg); }
+.dr-ovb.is-low { --ov-c: var(--ov-low); --ov-bg: var(--ov-low-bg); }
+.dr-ovb-title { display: flex; align-items: center; gap: 8px; }
+.dr-ovb-title i { width: 8px; height: 8px; border-radius: 50%; background: var(--ov-c); }
+.dr-ovb-title strong { font-family: var(--font-display); font-size: 10.5px; letter-spacing: 0.08em; color: var(--ov-c); }
+.dr-ovb-title span { font-size: 9.5px; color: var(--text-secondary); }
+.dr-ovb-title b { margin-left: auto; padding: 1px 8px; border-radius: 10px; background: var(--ov-c); color: #fff; font-family: var(--font-display); font-size: 9px; }
+.dr-ovb > p { margin: 4px 0 0; font-size: 9.6px; line-height: 1.45; color: var(--text-primary); }
+.dr-ovb ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+.dr-ovb li { font-size: 9.2px; line-height: 1.4; color: var(--text-primary); }
+.dr-ovb li b { display: inline-block; min-width: 32px; font-family: var(--font-display); color: var(--ov-c); }
+.dr-ovb .dr-ovb-label { grid-column: 1 / -1; font-weight: 600; color: var(--ov-c); }
+.dr-ovb .dr-ovb-more { margin-top: 4px; font-size: 9px; color: var(--text-secondary); }
 
 /* Section 05 */
 .dr-ret th:first-child { width: 21.7%; }
@@ -286,7 +325,7 @@
 .dr-way th, .dr-way td { padding-left: 6px; padding-right: 6px; }
 .dr-way td { padding: 10px 8px; font-size: 9.6px; }
 .dr-way td.fund { font-size: 9.8px; font-weight: 500; }
-.dr-way td.cat { font-size: 7.6px; letter-spacing: 0.03em; color: var(--text-muted); white-space: nowrap; }
+.dr-way td.cat { font-size: 7.6px; line-height: 1.35; letter-spacing: 0.03em; color: var(--text-muted); overflow-wrap: break-word; }
 .dr-way td.alloc { font-family: var(--font-display); font-weight: 700; font-size: 11px; color: var(--navy); }
 .dr-way td.amount { font-family: var(--font-display); font-weight: 700; font-size: 10.5px; color: var(--text-primary); }
 .dr-way td.num.up, .dr-way td.num.down { font-family: var(--font-display); font-weight: 600; }

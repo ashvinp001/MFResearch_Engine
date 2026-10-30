@@ -52,7 +52,11 @@ export { navSeries, trailingReturn, xirr } from "./analytics/returns.js";
 export { riskMetrics } from "./analytics/risk.js";
 export { assetGroup, buildFundData, fundInfo } from "./portfolio-analyzer/portfolio-performance.js";
 export { holdingCashflows, portfolioXirr, XIRR_EXCLUSION } from "./portfolio-analyzer/xirr.js";
+export { RETURN_VIEW, returnColumns, columnReturn, returnsTable, lastMove, recentPoints } from "./research/returns-table.js";
+export { PILLARS as SCORECARD_PILLARS, scoreCategory, backtestCategory, fundMeasures, resolveSettings, quartileOf, windowOf } from "./research/fund-scorecard.js";
 export { returnNotes } from "./portfolio-analyzer/return-notes.js";
+export { INDEX_PILLARS, indexFundMeasures, scoreIndexCategory } from "./research/index-scorecard.js";
+export { INDEX_FAMILY, TRACKED_INDICES, indexCategoryLabel, indexFamily, indexShortName, isIndexFund } from "./index-funds.js";
 export { buildAllocation, normalisedHoldings, withAllocation, WEIGHT_TOLERANCE } from "./portfolio-analyzer/allocation.js";
 
 export async function analyzeCasPdf({ data, password, fileName, pdfjs }) {

@@ -230,13 +230,14 @@ def attach_benchmarks(funds: dict, mapping: dict, series_by_code: dict, market_n
     """funds[code]["benchmark"] = {code, name, anchorDate, r1y, r3y, r5y} | None, and funds[code]["market"] = the
     broad market (MARKET_CODE) on the same anchor, for the sector check. Returns how many have a benchmark.
     A Pulse-made multi-index blend (benchmark_data.is_composite) is not used: benchmark None and
-    benchmarkExcluded says why (checked 22-Oct-2026: they do not follow their stated weights)."""
+    benchmarkExcluded says why (checked 22-Oct-2026: they do not follow their stated weights). Our own rebuilt blends
+    (benchmark_blends.py, codes SB…) are used like any index."""
     count = 0
     market = series_by_code.get(MARKET_CODE)
     for code, entry in funds.items():
         anchor = date.fromisoformat(entry["navDate"])
         m = (mapping.get("funds") or {}).get(code)
-        if m and is_composite(m.get("benchmarkName")):
+        if m and not m["benchmarkCode"].startswith("SB") and is_composite(m.get("benchmarkName")):
             entry["benchmarkExcluded"] = {"code": m["benchmarkCode"], "name": m.get("benchmarkName"), "reason": COMPOSITE_REASON}
             m = None
         series = series_by_code.get(m["benchmarkCode"]) if m else None

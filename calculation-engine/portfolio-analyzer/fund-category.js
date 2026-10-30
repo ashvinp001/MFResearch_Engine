@@ -69,7 +69,7 @@ const RULES = [
   [C.GOLD_SILVER, /\bgold\b|\bsilver\b|precious\s*metals?/],
 
   // Debt index / ETF / target-maturity funds have no row in the tables → not guessed.
-  [UNCLASSIFIED, /(?=.*(\bindex\b|\betf\b|target\s*maturity|bharat\s*bond|\bfof\b|fund\s*of\s*funds?))(?=.*(\bgilt\b|g[\s-]*sec|\bsdl\b|\bbond\b|\bdebt\b|t[\s-]*bill|treasury|crisil\s*ibx))/],
+  [UNCLASSIFIED, /(?=.*(\bindex\b|\betf\b|target\s*maturity|bharat\s*bond|\bfof\b|fund\s*of\s*funds?))(?=.*(\bgilt\b|\bg[\s-]*sec\b|\bsdl\b|\bbond\b|\bdebt\b|\bt[\s-]*bills?\b|treasury|crisil\s*ibx))/],
 
   // Debt (order matters).
   [C.OVERNIGHT, /overnight/],
@@ -92,7 +92,7 @@ const RULES = [
   [C.EQUITY, /\belss\b|tax[\s-]*sav(er|ings?)|long[\s-]*term\s*equity|tax\s*(plan|advantage)/],
 
   // Any other debt-looking name has no clear row → not guessed (never treated as equity).
-  [UNCLASSIFIED, /\bbond\b|\bdebt\b|g[\s-]*sec|\bsdl\b|t[\s-]*bill|treasury|\bincome\b|accrual|duration|maturity|fixed\s*term|\bfmp\b|savings/],
+  [UNCLASSIFIED, /\bbond\b|\bdebt\b|\bg[\s-]*sec\b|\bsdl\b|\bt[\s-]*bills?\b|treasury|\bincome\b|accrual|duration|maturity|fixed\s*term|\bfmp\b|savings/],
 
   // Equity. Index funds are the SEBI "Index Funds" category (7.0 yrs) even when they track mid/small caps.
   [C.EQUITY, /\bindex\b|\betf\b|nifty|sensex|\bbees\b/],

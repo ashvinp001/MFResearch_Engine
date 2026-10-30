@@ -50,6 +50,8 @@ BREAK_RATIO = Decimal("0.20")   # largest believable move between two index pric
 STRETCH_DAYS = 31               # a jump that reverses within this many days is a bad stretch, not a real level
 STRETCH_TOLERANCE = Decimal("0.05")
 CODE_RE = re.compile(r"^(OB|OHB|AB|AHB|AUB)(\d+)$")
+# Every stored code: Pulse's, and the benchmarks we build ourselves (benchmark_blends.py: SBGOLD, SBGS, SB<pulse code>).
+STORED_CODE_RE = re.compile(r"^((OB|OHB|AB|AHB|AUB)\d+|SB(GOLD|GS|(OB|OHB|AB|AHB|AUB)\d+))$")
 MANIFEST_PATH = "manifest.json"
 LATEST_PATH = "latest.json"
 MAPPING_PATH = "mapping/funds.json"
@@ -74,6 +76,8 @@ def is_composite(name: str | None) -> bool:
 
 
 def family(code: str) -> str:
+    if STORED_CODE_RE.match(code or "") and code.startswith("SB"):
+        return "sb"   # built by us (benchmark_blends.py)
     match = CODE_RE.match(code or "")
     if not match:
         raise BenchmarkError(f"not a Pulse benchmark code: {code!r}")
@@ -288,11 +292,11 @@ def compare_on(rows: list[tuple[date, Decimal]], day: date, published: Decimal) 
 
 # ---------- Parquet ----------
 
-def to_parquet(rows: list[tuple[date, Decimal]], code: str, name: str | None, fetched_at: str) -> bytes:
+def to_parquet(rows: list[tuple[date, Decimal]], code: str, name: str | None, fetched_at: str, source: str = SOURCE) -> bytes:
     quantum = Decimal(1).scaleb(-VALUE_SCALE)
     table = pa.table({"date": [d for d, _ in rows], "value": [v.quantize(quantum) for _, v in rows]}, schema=SCHEMA)
     metadata = {"schema_version": str(SCHEMA_VERSION), "benchmark_code": code, "benchmark_name": name or "",
-                "family": family(code), "source": SOURCE, "history_from": HISTORY_FROM.isoformat(), "fetched_at": fetched_at}
+                "family": family(code), "source": source,"history_from": HISTORY_FROM.isoformat(), "fetched_at": fetched_at}
     table = table.replace_schema_metadata({f"prosperr.{k}": v for k, v in metadata.items()})
     sink = pa.BufferOutputStream()
     pq.write_table(table, sink, compression="zstd", use_dictionary=False, write_statistics=True)

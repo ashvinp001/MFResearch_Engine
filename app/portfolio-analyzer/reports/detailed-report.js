@@ -20,7 +20,7 @@ import { OVERLAP_HIGH } from "../../../calculation-engine/portfolio-analyzer/det
 import { rupees, signedPct, signedWhole, tone } from "./snapshot-format.js";
 import {
   GROUP_LABEL, PERFORMANCE_NOTE, WHAT_THESE_MEAN, returnsIntro,
-  benchmarkColumn, fundCommentary, observations, oneYearTag, sourceNote,
+  benchmarkColumn, categoryLabel, fundCommentary, observations, sourceNote,
 } from "./detailed-copy.js";
 
 const VERDICT_TEXT = { invest: "INVEST", hold: "HOLD", sell: "SELL" };
@@ -127,10 +127,14 @@ export async function renderDetailedReport({ model, clientName, settings, report
   section01(stage, model, clientName, settings, asOn);
   section02(stage, model);
   section03(stage, model);
-  sectionOverlap(stage, model);
-  section04(stage, model);
-  section05(stage, model);
-  // The advisor may skip the recommended portfolio; the report then ends with Section 06.
+  // Portfolio Overlap only when it can be shown; otherwise the next sections move up a number.
+  let next = 4;
+  const number = () => String(next++).padStart(2, "0");
+  // Left out (not a placeholder) when there is nothing to compare: one fund, or no stock-level holdings for two funds.
+  if (model.overlapApplies !== false && model.overlap) sectionOverlap(stage, model, number());
+  section04(stage, model, number());
+  section05(stage, model, number());
+  // The advisor may skip the recommended portfolio; the report then ends with the Conclusion section.
   if (model.recommended) wayForward(stage, model);
 
   const doc = h("div", { class: "dr-doc" }, ...stage.children);
@@ -188,9 +192,12 @@ function section01(stage, model, clientName, settings, asOn) {
 
   const groups = [];
   for (const group of model.holdings.groups) {
-    if (group.key) {
-      groups.push(h("tr", { class: `dr-group is-${group.key}` },
-        h("td", { colspan: 4 }, GROUP_LABEL[group.key]),
+    // Every group has its heading — funds the analysis could not place get their own "OTHER" heading, so they can
+    // never appear to belong to the group above them. (Without any asset data there is one list and no headings.)
+    const known = model.holdings.groups.some((g) => g.key);
+    if (group.key || known) {
+      groups.push(h("tr", { class: `dr-group is-${group.key ?? "other"}` },
+        h("td", { colspan: 4 }, GROUP_LABEL[group.key ?? "other"]),
         h("td", { colspan: 2, class: "num" }, `${rupees(group.value)} · ${group.weightPct.toFixed(1)}%`)));
     }
     for (const row of group.rows) {
@@ -226,7 +233,8 @@ function legend(items) {
     h("li", {}, h("i", { style: { background: item.color } }), h("span", {}, item.label), h("strong", { style: { color: item.textColor ?? item.color } }, item.value))));
 }
 
-const pending = (text = "Appears once fund data is connected.") => h("p", { class: "dr-pending" }, text);
+// Client-facing: when a figure cannot be shown for this portfolio, say so plainly.
+const pending = (text = "This analysis is not available for the funds in this portfolio.") => h("p", { class: "dr-pending" }, text);
 
 function section02(stage, model) {
   const w = sectionWriter(stage, { eyebrow: "SECTION 02", title: "Portfolio Allocation", footer: "SECTION 02" });
@@ -268,7 +276,7 @@ function section02(stage, model) {
     h("p", { class: "dr-sub" }, "How each equity fund distributes across Large, Mid & Small cap.",
       model.marketCapByFund?.excludedNote ? ` ${model.marketCapByFund.excludedNote}` : ""));
   if (!model.marketCapByFund) {
-    w.block(h("div", {}, intro, pending("The fund-wise market-cap split appears once fund data is connected.")));
+    w.block(h("div", {}, intro, pending("Fund-wise market-capitalisation data is not available for these funds.")));
     return;
   }
   const composition = (cap) => h("div", { class: "dr-stack" },
@@ -314,9 +322,9 @@ function section03(stage, model) {
       const fundRow = h("tr", { class: "dr-perf-fund" }, h("td", {}, row.name),
         ...periods.map((p) => h("td", { class: `num ${cellTone(row, p)}` }, value(row.returns?.[p]))));
       // The benchmark comparison line is always shown under each fund (as in the sample);
-      // until fund data is connected the benchmark name and values read "—".
+      // without a verified benchmark the benchmark name and values read "—".
       const benchRow = h("tr", { class: "dr-perf-bench" },
-        h("td", {}, h("i"), row.benchmark ? row.benchmark.toUpperCase() : "BENCHMARK — NOT AVAILABLE"),
+        h("td", {}, h("i"), row.benchmark ? row.benchmark.toUpperCase() : "BENCHMARK DATA NOT AVAILABLE"),
         ...periods.map((p) => h("td", { class: "num" }, value(row.benchmarkReturns?.[p]))));
       groups.push([fundRow, benchRow]);
     }
@@ -333,17 +341,6 @@ function section03(stage, model) {
 }
 
 // ---------- Section 04: Portfolio Overlap ----------
-/** "Axis ELSS- Tax Saver Fund - Direct Growth (Demat)" → "Axis ELSS- Tax Saver Fund (Direct)". */
-function shortFundName(name) {
-  const plan = /\b(direct|dir)\b/i.test(name) ? "Direct" : /\b(regular|reg)\b/i.test(name) ? "Regular" : null;
-  const clean = name.replace(/\s*\((?:formerly|erstwhile)[^)]*\)/gi, "").replace(/\s*\((?:non[\s-]*)?demat\)/gi, "");
-  // The name runs up to the part that says "Fund" / "ETF" / "FoF" ("NIPPON INDIA - US EQUITY OPPORTUNITIES FUND - DIRECT …").
-  const parts = clean.split(/\s+-\s+/);
-  const end = parts.findIndex((p) => /\b(fund|etf|fof|index)\b/i.test(p));
-  const base = parts.slice(0, end >= 0 ? end + 1 : 1).join(" - ")
-    .replace(/\s+\b(direct|regular)\b(\s+plan)?(\s+growth)?(\s+option)?\s*$/i, "").replace(/\s+growth\s*$/i, "").trim();
-  return plan ? `${titleCase(base)} (${plan})` : titleCase(base);
-}
 /** A name the CAS prints in capitals, in title case; short abbreviations (US, ETF, BSE, SBI) stay as they are. */
 function titleCase(text) {
   if (text !== text.toUpperCase()) return text;
@@ -352,62 +349,123 @@ function titleCase(text) {
 }
 /** Overlap as a whole percentage: 0.34 → "34%". */
 const ovPct = (v) => `${Math.round(v * 100)}%`;
-/** Cell colour: light blue (no overlap) → deep navy (identical), as in the reference matrix. */
-function overlapColor(v) {
-  const from = [226, 234, 246], to = [30, 74, 150];
-  const t = Math.max(0, Math.min(1, v));
-  return `rgb(${from.map((c, i) => Math.round(c + (to[i] - c) * t)).join(",")})`;
+/** Above this many rows the closest-overlap chart runs in two columns. */
+const CHART_ONE_COLUMN = 16;
+/** Smallest scales when the chart and the summary are fitted onto one page (keep the text readable). */
+const CHART_MIN_ZOOM = 0.6;
+const SUMMARY_MIN_ZOOM = 0.82;
+// The three overlap buckets: heading, range, what the bucket means for the client, and how many pairs are listed.
+const OVERLAP_BUCKETS = [
+  { key: "high", title: "High overlap", range: "50% and above", shown: 10,
+    lead: (n) => n ? `${n} pair${n === 1 ? " holds" : "s hold"} largely the same stocks. Holding both funds of a pair adds cost and complexity without spreading risk — consolidating into the stronger fund is worth considering.`
+      : "No two funds share half or more of their stocks — there is no duplicated exposure." },
+  { key: "moderate", title: "Moderate overlap", range: "25% to 50%", shown: 8,
+    lead: (n) => n ? `${n} pair${n === 1 ? " shares" : "s share"} a meaningful part of the portfolio, mostly the largest companies. Acceptable, but worth watching before adding similar funds.`
+      : "No pair of funds falls in this range." },
+  { key: "low", title: "Low overlap", range: "below 25%", shown: 6,
+    lead: (n) => n ? `${n} pair${n === 1 ? " is" : "s are"} well differentiated — each fund of the pair brings different stocks and adds genuine diversification.`
+      : "No pair of funds is below 25%." },
+];
+
+/** Pairs reordered so the first ones each bring funds not yet listed (a fund with 0% against everyone would
+ * otherwise fill the low-overlap list on its own); the rest follow in their order. */
+function variedPairs(pairs) {
+  const seen = new Set(), first = [], rest = [];
+  for (const p of pairs) {
+    if (seen.has(p.aN) || seen.has(p.bN)) rest.push(p);
+    else { first.push(p); seen.add(p.aN); seen.add(p.bN); }
+  }
+  return [...first, ...rest];
 }
 
-function sectionOverlap(stage, model) {
-  const w = sectionWriter(stage, { eyebrow: "SECTION 04", title: "Portfolio Overlap", footer: "SECTION 04" });
+function sectionOverlap(stage, model, num = "04") {
+  const w = sectionWriter(stage, { eyebrow: `SECTION ${num}`, title: "Portfolio Overlap", footer: `SECTION ${num}` });
   const o = model.overlap;
   w.block(h("p", { class: "dr-intro" },
-    "How much of each pair of funds is invested in the same stocks — the sum of the smaller weight of every stock both funds hold. ",
-    h("strong", {}, "100%"), " means identical portfolios, ", h("strong", {}, "0%"), " nothing in common; above ",
-    h("strong", {}, ovPct(OVERLAP_HIGH)), " the two funds give largely the same exposure."));
+    "How much of each pair of funds is invested in the same stocks. ", h("strong", {}, "0%"), " means nothing in common and ",
+    h("strong", {}, "100%"), " identical portfolios; at ", h("strong", {}, ovPct(OVERLAP_HIGH)), " or more the two funds give largely the same exposure."));
   if (!o) {
-    w.block(pending("The overlap matrix appears once the funds' holdings are available (at least two funds that hold stocks)."));
+    w.block(pending("Overlap analysis needs stock-level holdings for at least two equity funds and is not applicable to this portfolio."));
     return;
   }
-  const n = o.funds.length;
-  const head = () => h("thead", {}, h("tr", {}, h("th", { class: "name" }, "FUND NAME"), ...o.funds.map((f) => h("th", { class: "num" }, String(f.n)))));
-  const rows = o.funds.map((f, i) => h("tr", {},
-    h("td", { class: "name" }, h("span", { class: "dr-ov-n" }, String(f.n)), titleCase(shortFundName(f.name))),
-    ...Array.from({ length: n }, (_, j) => {
-      if (j > i) return h("td", { class: "dr-ov-empty" });
-      const v = o.matrix[i][j];
-      if (v === null) return h("td", { class: "dr-ov-cell" }, DASH);
-      return h("td", { class: `dr-ov-cell ${i === j ? "is-self" : ""} ${v >= OVERLAP_HIGH ? "is-dark" : ""}`.trim(), style: { background: i === j ? "#1f4b99" : overlapColor(v) } }, ovPct(v));
-    })));
-  w.fitTable({
-    className: "dr-overlap",
-    head,
-    groups: rows,
-    after: h("div", { class: "dr-keys dr-ov-keys" },
-      h("span", {}, h("i", { style: { background: overlapColor(0.1) } }), "Low (below 25%)"),
-      h("span", {}, h("i", { style: { background: overlapColor(0.37) } }), "Moderate (25–50%)"),
-      h("span", {}, h("i", { style: { background: overlapColor(0.75) } }), "High (50% and above)"),
+  const scope = "Equity and hybrid funds are compared (index funds and equity ETFs included; for a hybrid fund, its stock portion). A fund held in several folios or in both its Regular and Direct plans counts once. Debt, gold & silver funds, funds of funds and arbitrage funds are not compared.";
+  // Closest overlap for every fund: one lollipop row per pair on a 0–100% scale, highest first; two columns when long.
+  const track = (v, band) => h("div", { class: "dr-ovc-track" },
+    h("i",{ class: `dr-ovc-stick is-${band}`, style: { width: `${v * 100}%` } }),
+    h("i", { class: `dr-ovc-dot is-${band}`, style: { left: `${v * 100}%` } }),
+    h("span", { class: `dr-ovc-val is-${band}${v > 0.84 ? " is-inside" : ""}`, style: v > 0.84 ? { right: `${100 - v * 100}%` } : { left: `${v * 100}%` } }, ovPct(v)));
+  const row = (r) => h("div", { class: "dr-ovc-row" },
+    r.solo
+      // a fund below 10% with every fund: its own row, the line drawn to its highest overlap (green)
+      ? [h("div", { class: "dr-ovc-names" }, h("b", {}, titleCase(r.solo))), track(r.overlap, "low")]
+      : [h("div", { class: "dr-ovc-names" }, h("b", {}, titleCase(r.a)), h("em", {}, "vs"), h("b", {}, titleCase(r.b))), track(r.overlap, r.band)]);
+  const axis = () => h("div", { class: "dr-ovc-row is-axis" }, h("span", {}),
+    h("div", { class: "dr-ovc-ticks" }, ...[0, 25, 50, 75, 100].map((t) => h("span", { style: { left: `${t}%` } }, `${t}%`))));
+  const rows = o.closest;
+  const two = rows.length > CHART_ONE_COLUMN;
+  const half = Math.ceil(rows.length / 2);
+  const columns = two ? [rows.slice(0, half), rows.slice(half)] : [rows];
+  const chart = h("div", { class: "dr-ovc" },
+    h("div", { class: "dr-ovc-head" }, h("h2", { class: "dr-h" }, "CLOSEST OVERLAP FOR EVERY FUND"),
+      h("span", {}, `${o.funds.length} funds · each appears on the row of the fund it overlaps with most`)),
+    h("div", { class: `dr-ovc-cols${two ? " is-two" : ""}` }, columns.map((list) => h("div", {}, axis(), list.map(row)))),
+    h("div", { class: "dr-keys dr-ov-keys" },
+      h("span", {}, h("i", { class: "dr-ov-key is-high" }), "High — 50% and above"),
+      h("span", {}, h("i", { class: "dr-ov-key is-moderate" }), "Moderate — 25% to 50%"),
+      h("span", {}, h("i", { class: "dr-ov-key is-low" }), "Low — below 25%"),
       o.asOn ? h("span", { class: "dr-asof" }, `Holdings as disclosed for ${o.asOn}`) : null),
-    minZoom: 0.5,
-  });
-  const scope = "Equity funds are compared (both plans of a fund count once); hybrid, debt and gold funds are not, as only part of them — or none — is in stocks.";
-  w.block(h("p", { class: "dr-note dr-ov-note" }, o.hidden > 0
-    ? `The ${n} largest equity funds are shown; ${o.hidden} smaller one${o.hidden === 1 ? " is" : "s are"} included in the high-overlap list below. ${scope}`
-    : scope));
-  const more = o.pairs.length - PAIRS_SHOWN;
-  w.block(h("div", { class: "dr-ov-pairs" },
-    h("h2", { class: "dr-h" }, "HIGH OVERLAP PAIRS"),
-    o.pairs.length
-      ? h("ul", {}, o.pairs.slice(0, PAIRS_SHOWN).map((p) => h("li", {}, h("strong", {}, ovPct(p.overlap)), h("span", {}, `${titleCase(shortFundName(p.a))}  ·  ${titleCase(shortFundName(p.b))}`))))
-      : h("p", {}, `No two funds share ${ovPct(OVERLAP_HIGH)} or more of their stocks — the funds are well differentiated.`),
-    more > 0 ? h("p", {}, `+ ${more} more pair${more === 1 ? "" : "s"} at ${ovPct(OVERLAP_HIGH)} or above.`) : null));
+    h("p", { class: "dr-note dr-ov-note" }, scope));
+  // The chart and the summary on one page: the chart is scaled down first, then the summary, each to a readable minimum;
+  // only if they still do not fit does the summary continue on the next page.
+  const summary = overlapSummary(o);
+  const rest = h("div", {}, summary);
+  const body = w.page.body;
+  body.append(chart, rest);
+  const shrink = (el, min) => {
+    let zoom = 1;
+    while (overflowing(body) && zoom > min) {
+      zoom = Math.round((zoom - 0.02) * 100) / 100;
+      el.style.zoom = String(zoom);
+    }
+  };
+  shrink(chart, CHART_MIN_ZOOM);
+  shrink(rest, SUMMARY_MIN_ZOOM);
+  if (overflowing(body)) {
+    rest.remove();
+    summary.forEach((block) => w.block(block));
+  }
 }
-const PAIRS_SHOWN = 10;
+
+/** Overlap Summary blocks: per bucket one comment, then the pairs' names only (Low: the funds that overlap little with
+ * every other fund, as its pairs are most of the list). The heading travels with the first box. */
+function overlapSummary(o) {
+  return OVERLAP_BUCKETS.map((b) => {
+    const pairs = b.key === "low" ? variedPairs([...o.buckets.low].reverse()) : o.buckets[b.key];   // low: most distinct first
+    const common = b.key === "low" ? [] : commonHoldings(pairs);
+    const names = b.key === "low" && o.distinct.length
+      ? o.distinct.map((name) => h("li", {}, titleCase(name)))
+      : pairs.slice(0, b.shown).map((p) => h("li", {}, h("b", {}, ovPct(p.overlap)), `${titleCase(p.a)}  vs  ${titleCase(p.b)}`));
+    const more = b.key === "low" && o.distinct.length ? 0 : pairs.length - names.length;
+    const box = h("div", { class: `dr-ovb is-${b.key}` },
+      h("div", { class: "dr-ovb-title" }, h("i"), h("strong", {}, b.title.toUpperCase()), h("span", {}, b.range), h("b", {}, `${pairs.length} pair${pairs.length === 1 ? "" : "s"}`)),
+      h("p", {}, b.lead(pairs.length), common.length ? ` The stocks most often held in common: ${common.join(", ")}.` : ""),
+      names.length ? h("ul", { class: b.key === "low" && o.distinct.length ? "is-funds" : "" },
+        b.key === "low" && o.distinct.length ? h("li", { class: "dr-ovb-label" }, "Funds with low overlap against every other fund:") : null, names) : null,
+      more > 0 ? h("p", { class: "dr-ovb-more" }, `+ ${more} more pair${more === 1 ? "" : "s"} in this range.`) : null);
+    return b.key === "high" ? h("div", {}, h("h2", { class: "dr-h dr-ovb-h" }, "OVERLAP SUMMARY"), box) : box;
+  });
+}
+
+/** The stocks that appear most often among the pairs' largest common holdings (at most three). */
+function commonHoldings(pairs) {
+  const count = new Map();
+  for (const p of pairs) for (const name of p.shared) count.set(name, (count.get(name) ?? 0) + 1);
+  return [...count].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([name]) => name);
+}
 
 // ---------- Section 05 ----------
-function section04(stage, model) {
-  const w = sectionWriter(stage, { eyebrow: "SECTION 05", title: "Returns & Risk", footer: "SECTION 05" });
+function section04(stage, model, num = "05") {
+  const w = sectionWriter(stage, { eyebrow: `SECTION ${num}`, title: "Returns & Risk", footer: `SECTION ${num}` });
   w.block(h("p", { class: "dr-intro" }, returnsIntro(model)));
 
   const returnsByPeriod = new Map((model.portfolioReturns ?? []).map((r) => [r.period, r]));
@@ -492,8 +550,8 @@ function byFund(rows) {
 }
 
 // ---------- Section 06 ----------
-function section05(stage, model) {
-  const w = sectionWriter(stage, { eyebrow: "SECTION 06", title: "Conclusion & Recommendation", footer: "SECTION 06" });
+function section05(stage, model, num = "06") {
+  const w = sectionWriter(stage, { eyebrow: `SECTION ${num}`, title: "Conclusion & Recommendation", footer: `SECTION ${num}` });
 
   // Opening summary: Invest / Hold / Sell — count, value and share of the portfolio.
   const vs = model.verdictSummary;
@@ -519,13 +577,11 @@ function section05(stage, model) {
   const rows = byFund(model.holdings.groups.flatMap((group) => group.rows))
     .sort((p, q) => rank(p) - rank(q) || p.name.localeCompare(q.name, "en", { sensitivity: "base" }));
   for (const row of rows) {
-    const tag = oneYearTag(row);
     w.block(h("div", { class: `dr-verdict is-${row.verdict ?? "none"}` },
       h("div", { class: "dr-verdict-badge" }, badge(row.verdict)),
       h("div", {},
         h("div", { class: "dr-verdict-head" },
-          h("strong", {}, row.name, row.folioNote ? h("span", { class: "dr-folio" }, ` (${row.folioNote})`) : null),
-          h("span", { class: tag.tone || (row.verdict === "sell" ? "down" : "") }, tag.text)),
+          h("strong", {}, row.name, row.folioNote ? h("span", { class: "dr-folio" }, ` (${row.folioNote})`) : null)),
         h("p", {}, fundCommentary(row, row.verdict, { hasRecommended: Boolean(model.recommended) })))));
   }
   if (model.suggestions?.length) {
@@ -556,7 +612,7 @@ function wayForward(stage, model) {
   };
   const rows = (rec?.rows ?? []).map((item) => h("tr", {},
     h("td", { class: "fund" }, item.name),
-    h("td", { class: "center cat" }, item.category ? item.category.toUpperCase() : DASH),
+    h("td", { class: "center cat" }, categoryLabel(item.category, { name: item.name, benchmark: item.benchmark }) ?? DASH),
     h("td", { class: "center" }, item.benchmark ? h("span", { class: "dr-chip" }, item.benchmark.toUpperCase()) : DASH),
     h("td", { class: "num alloc" }, allocText(item.pct)),
     ret(item, "r1y"), ret(item, "r3y"), ret(item, "r5y"),

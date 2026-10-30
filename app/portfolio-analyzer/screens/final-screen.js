@@ -18,16 +18,15 @@ import { formatInr, todayIso } from "../../shared/format.js";
 import { pageBand } from "../../shared/page-band.js";
 import { printElement } from "../../shared/print.js";
 import { renderDetailedReport } from "../reports/detailed-report.js";
-import { DIVERSIFICATION, HORIZONS, RISK_PROFILES } from "../reports/detailed-copy.js";
 import { autoDetails, autoNote } from "../report-profile-notes.js";
 import { signedPct, signedWhole } from "../reports/snapshot-format.js";
 
 export const STEP = { REVIEW: 1, RECOMMENDATION: 2, BUILDER: 3 };
 
 export function createFinalScreen({ model, portfolio, recommendation, allocation, skipped = false, profile = null, store, onGoTo, onChange, notes = [] }) {
-  // Report details are pre-filled by the Prosperr logic (engine buildReportProfile); the advisor can change them.
-  const auto = autoDetails(profile);
-  const details = store.state.reportDetails ??= { ...auto };
+  // Report details come from the Prosperr logic (engine buildReportProfile) and are locked: nobody can change them.
+  // Where the logic cannot decide, the report shows "—".
+  const details = store.state.reportDetails = { ...autoDetails(profile) };
   let reviewed = false;
   let busy = false;
 
@@ -84,14 +83,12 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
         ]),
     {
       title: "Report reviewed",
-      ok: () => reviewed && detailsComplete(),
-      detail: "Complete the report details (risk profile, horizon, diversification), then go through the report summary on the left.",
+      ok: () => reviewed,
+      detail: "Go through the report details and the report summary on the left.",
       confirm: {
         label: "I have reviewed this report",
         get: () => reviewed,
         set: (value) => { reviewed = value; },
-        enabled: detailsComplete,
-        lockedHint: "Select risk profile, horizon and diversification first.",
       },
     },
   ];
@@ -123,16 +120,6 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
     return h("div", {},
       h("label", { class: `fin-confirm ${enabled ? "" : "is-locked"}`.trim() }, input, h("span", {}, confirm.label)),
       enabled || !confirm.lockedHint ? null : h("p", { class: "fin-locked-hint" }, Icon("lock", { size: 12 }), ` ${confirm.lockedHint}`));
-  }
-
-  function detailsComplete() {
-    return Boolean(details.riskProfile && details.horizon && details.diversification);
-  }
-
-  /** A change to the report details re-opens the review. */
-  function onDetailsChange() {
-    if (!detailsComplete()) reviewed = false;
-    render();
   }
 
   function canDownload() {
@@ -178,12 +165,12 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
     pageBand({
       eyebrow: "Step 5 · Final review",
       title: "Cross-verify and download the report",
-      text: "Check what goes into each section, set the report details, complete the checklist, then download the Portfolio Review & Recommendation as a PDF.",
+      text: "Check what goes into each section and the report details, complete the checklist, then download the Portfolio Review & Recommendation as a PDF.",
     }),
     h("div", { class: "app-container app-step-body fin-layout" },
       h("div", { class: "fin-main" },
         coverCard(model, portfolio, () => openPreview()),
-        detailsCard(details, onDetailsChange, profile, auto),
+        detailsCard(details, profile),
         h("div", { class: "fin-sections" }, sectionCards(model, recommendation).map((card, i) => sectionCard(card, i))),
         notesCard(notes, profile?.risk?.others ?? [])),
       h("aside", { class: "fin-side" },
@@ -231,7 +218,7 @@ function coverCard(model, portfolio, onPreview) {
       h("p", {}, "Prepared for ", h("strong", {}, name), ` · As on ${todayIso()}`),
       h("button", { type: "button", class: "ds-btn ds-btn-sm fin-preview-btn", onclick: onPreview }, Icon("search", { size: 16 }), "Preview full report"),
       h("div", { class: "fin-cover-facts" },
-        fact("Sections", model.recommended ? "8" : "7"),   // cover + Sections 01–06 (+ The Way Forward)
+        fact("Sections", String((model.recommended ? 8 : 7) - (model.overlapApplies !== false && model.overlap ? 0 : 1))),   // cover + Sections 01–06 (+ The Way Forward); no Overlap with one fund
         fact("Funds", String(model.fundCount)),
         fact("Current value", formatInr(model.totals.value, { whole: true })),
         fact("Format", "PDF · US Letter"))));
@@ -241,21 +228,20 @@ function fact(label, value) {
   return h("div", { class: "fin-fact" }, h("span", {}, label), h("strong", {}, value));
 }
 
-function detailsCard(details, onChange, profile, auto) {
-  const select = (label, options, key) => {
-    const input = h("select", {}, h("option", { value: "" }, "Not specified"), options.map((option) => h("option", { value: option }, option)));
-    input.value = details[key];
-    const note = autoNote({ profile, key, auto, current: () => details[key] });
-    input.addEventListener("change", () => { details[key] = input.value; note.update(); onChange(); });
-    return h("label", { class: "snp-field" }, h("span", { class: "ds-label" }, label), input, note.element);
-  };
+/** Report details: locked values from the logic, each with its basis. */
+function detailsCard(details, profile) {
+  const field = (label, key) => h("div", { class: "snp-field" },
+    h("span", { class: "ds-label" }, label),
+    h("div", { class: `fin-locked-field${details[key] ? "" : " is-empty"}`, "aria-readonly": "true" },
+      h("span", {}, details[key] || "Not determined"), Icon("lock", { size: 14 })),
+    autoNote({ profile, key, auto: details, current: () => details[key], locked: true }).element);
   return h("section", { class: "fin-details" },
     h("div", { class: "fin-details-head" }, Icon("user", { size: 18 }), h("div", {}, h("strong", {}, "Report details"),
-      h("p", {}, "Shown under Client Details in Section 01. Filled automatically from the portfolio — change any of them if needed."))),
+      h("p", {}, "Shown under Client Details in Section 01. Set by the Prosperr logic from the portfolio — locked, cannot be changed."))),
     h("div", { class: "fin-details-grid" },
-      select("Risk profile", RISK_PROFILES, "riskProfile"),
-      select("Horizon", HORIZONS, "horizon"),
-      select("Diversification", DIVERSIFICATION, "diversification")));
+      field("Risk profile", "riskProfile"),
+      field("Horizon", "horizon"),
+      field("Diversification", "diversification")));
 }
 
 function sectionCards(model, recommendation) {
@@ -263,7 +249,7 @@ function sectionCards(model, recommendation) {
   const hasReturns = Boolean(model.portfolioReturns || model.performance.some((g) => g.rows.some((r) => r.returns)));
   const hasAllocationData = Boolean(model.composition || model.marketCap || model.sectors);
   const v = recommendation.byVerdict;
-  return [
+  const cards = [
     {
       code: "01", title: "Client & Portfolio Overview", icon: "user", status: "ready",
       text: "Client details, portfolio snapshot and every holding with its recommendation.",
@@ -281,8 +267,10 @@ function sectionCards(model, recommendation) {
     },
     {
       code: "04", title: "Portfolio Overlap", icon: "layers", status: model.overlap ? "ready" : "pending",
-      text: "How much each pair of funds holds the same stocks (0–100%), with the high-overlap pairs listed.",
-      facts: model.overlap ? [`${model.overlap.funds.length + model.overlap.hidden} funds compared`, `${model.overlap.pairs.length} high-overlap pair${model.overlap.pairs.length === 1 ? "" : "s"}`] : ["Awaiting fund holdings"],
+      text: "How much each pair of funds holds the same stocks (0–100%), grouped into high, moderate and low overlap with an insight for each pair.",
+      facts: model.overlap
+        ? [`${model.overlap.funds.length} funds compared`, ...["high", "moderate", "low"].map((b) => `${model.overlap.buckets[b].length} ${b}`)]
+        : ["Awaiting fund holdings"],
     },
     {
       code: "05", title: "Returns & Risk", icon: "shield", status: hasReturns ? "ready" : "partial",
@@ -300,6 +288,12 @@ function sectionCards(model, recommendation) {
       facts: rec ? [rec.mode === "sip" ? `Monthly SIP ${formatInr(rec.amount, { whole: true })}` : `Lumpsum ${formatInr(rec.amount, { whole: true })}`, `${rec.rows.length} funds`, `${rec.totalPct}% allocated`] : ["Skipped — not included in the report"],
     },
   ];
+  // No Portfolio Overlap section (one fund, or no stock-level holdings for two funds): the sections after it move up
+  // a number, exactly as in the PDF.
+  if (model.overlapApplies !== false && model.overlap) return cards;
+  let next = 4;
+  return cards.filter((c) => c.title !== "Portfolio Overlap")
+    .map((c) => (/^\d+$/.test(c.code) && Number(c.code) >= 4 ? { ...c, code: String(next++).padStart(2, "0") } : c));
 }
 
 const STATUS_TEXT = { ready: "Ready", partial: "Partly ready", pending: "Awaiting data", skipped: "Not included" };

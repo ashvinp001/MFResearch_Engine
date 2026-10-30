@@ -267,6 +267,9 @@ button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible 
 .fin-details-head p { margin: 0; font-size: 13px; color: var(--text-muted); }
 .fin-details-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); margin-top: var(--sp-3); align-items: start; }
 /* Basis of an automatically filled report detail (Prosperr logic) */
+.fin-locked-field { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: var(--r-md); background: var(--surface-alt); color: var(--text-primary); font-weight: 600; cursor: not-allowed; user-select: none; }
+.fin-locked-field .ds-icon { color: var(--text-muted); flex: none; }
+.fin-locked-field.is-empty span { color: var(--text-muted); font-weight: 400; }
 .fin-auto-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--color-info); }
 .fin-auto-note .ds-icon { vertical-align: -1px; }
 .fin-auto-note.is-changed { color: var(--color-warning); }
@@ -374,7 +377,9 @@ button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible 
 .rec-tool[aria-pressed="true"] .rec-switch { background: var(--lime); border-color: var(--lime); }
 .rec-tool[aria-pressed="true"] .rec-switch i { transform: translateX(20px); }
 .rec-tool:disabled .rec-switch { display: none; }
-.rec-plan-group { padding: 8px 24px; font-family: var(--font-display); font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-info); background: var(--surface-tint-blue); border-top: 1px solid var(--border); }
+.rec-plan-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 24px; font-family: var(--font-display); font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-info); background: var(--surface-tint-blue); border-top: 1px solid var(--border); }
+.rec-plan-total { letter-spacing: 0.04em; text-transform: none; font-size: 13px; color: var(--text-secondary); }
+.rec-plan-total strong { font-size: 14px; color: var(--color-primary); }
 .rec-plan { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.04em; vertical-align: middle; }
 .rec-plan.is-regular { background: var(--surface-tint-amber); color: var(--color-warning); }
 .rec-plan.is-direct { background: var(--surface-tint-green); color: var(--color-positive); }
