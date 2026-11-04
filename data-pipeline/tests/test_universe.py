@@ -4,12 +4,14 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from amfi_source import AmfiFormatError, parse_nav_file, parse_scheme_master  # noqa: E402
-from build_universe import build, resolve  # noqa: E402
+from build_universe import build, data_date, resolve  # noqa: E402
 from scheme_lists import ListError, check, read_lists, write_lists  # noqa: E402
 from universe_rules import (  # noqa: E402
     Excluded, Included, UnknownSectionError, classify, is_valid_isin, plan_option_from_nav_name,
@@ -312,6 +314,18 @@ class MasterTests(unittest.TestCase):
                                 master_csv((7, "X Fund", "X Fund - Direct Plan - Growth", "05-Mar-2016")), [])
         self.assertEqual([(s["schemeCode"], s["plan"]) for s in schemes], [(7, "Direct")])
         self.assertEqual(report["plansFromSchemeMaster"], 1)
+
+
+class DataDateTests(unittest.TestCase):
+    def rows(self, *days):
+        return [SimpleNamespace(nav_date=date.fromisoformat(d)) for d in days]
+
+    def test_a_nav_dated_ahead_does_not_move_the_data_date(self):
+        rows = self.rows("2026-10-29", "2026-10-30", "2026-11-01")
+        self.assertEqual(data_date(rows, date(2026, 10, 30)), date(2026, 10, 30))
+
+    def test_latest_date_when_none_is_ahead(self):
+        self.assertEqual(data_date(self.rows("2026-10-28", "2026-10-29"), date(2026, 10, 30)), date(2026, 10, 29))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-{"source": "AMFI", "dataAsOf": "2026-10-29", "plan": "ETF", "count": 348,
+{"source": "AMFI", "dataAsOf": "2026-11-03", "plan": "ETF", "count": 348,
   "schemes": [
     {"schemeCode":101705,"schemeName":"ICICI Prudential BSE Sensex ETF","amc":"ICICI Prudential Mutual Fund","assetClass":"Other","category":"Other ETFs","isin":"INF346A01034","isinReinvest":null,"active":true},
     {"schemeCode":105463,"schemeName":"UTI - Gold Exchange Traded Fund","amc":"UTI Mutual Fund","assetClass":"Other","category":"Gold ETF","isin":"INF789F1AUX7","isinReinvest":null,"active":true},
@@ -337,7 +337,7 @@
     {"schemeCode":154552,"schemeName":"Motilal Oswal Nifty Oil & Gas ETF","amc":"Motilal Oswal Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF247L01HH5","isinReinvest":null,"active":true},
     {"schemeCode":154593,"schemeName":"DSP NIFTY 10 YR BENCHMARK G-SEC ETF","amc":"DSP Mutual Fund","assetClass":"Other","category":"Debt ETF","isin":"INF740KA1ZI7","isinReinvest":null,"active":true},
     {"schemeCode":154602,"schemeName":"UTI Nifty 500 Exchange Traded Fund","amc":"UTI Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF789F1AG76","isinReinvest":null,"active":true},
-    {"schemeCode":154625,"schemeName":"quant Silver ETF","amc":"quant Mutual Fund","assetClass":"Other","category":"Silver ETF","isin":null,"isinReinvest":null,"active":true},
+    {"schemeCode":154625,"schemeName":"quant Silver ETF","amc":"quant Mutual Fund","assetClass":"Other","category":"Silver ETF","isin":"INF966L01EI5","isinReinvest":null,"active":true},
     {"schemeCode":154626,"schemeName":"Mirae Asset BSE LargeMid (60:40) Stable Dividend 50 ETF","amc":"Mirae Asset Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF769K01RK3","isinReinvest":null,"active":true},
     {"schemeCode":154627,"schemeName":"Axis Nifty Energy ETF","amc":"Axis Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF846KA1598","isinReinvest":null,"active":true},
     {"schemeCode":154698,"schemeName":"UTI BSE India Sector Leaders Exchange Traded Fund","amc":"UTI Mutual Fund","assetClass":"Other","category":"Equity ETF","isin":"INF789F1AH42","isinReinvest":null,"active":true},

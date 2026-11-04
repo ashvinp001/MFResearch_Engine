@@ -1,0 +1,16 @@
+{
+  "name": "prosperr-wealth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prosperr.io Wealth: Portfolio Analyzer, Fund Research and Fund Scorecard",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "start:lan": "node server/index.js --lan",
+    "test": "node --test \"server/tests/*.test.js\"",
+    "test:pipeline": "python -m unittest discover -s data-pipeline/tests"
+  }
+}

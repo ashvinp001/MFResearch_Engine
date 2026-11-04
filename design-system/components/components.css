@@ -11,11 +11,6 @@
 }
 .ds-logo-tld { color: var(--color-accent); }
 
-/* Section header */
-.ds-section-header { margin-bottom: var(--sp-4); }
-.ds-section-header-row { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
-.ds-divider { height: 3px; border-radius: 3px; background: var(--grad-divider); margin-top: var(--sp-3); }
-
 /* Card */
 .ds-card {
   background: var(--surface);

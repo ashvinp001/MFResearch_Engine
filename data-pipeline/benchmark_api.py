@@ -1,6 +1,6 @@
 """Benchmark price history for the website (called by the local server for GET /api/benchmark-history?codes=…).
 
-Usage (by serve.ps1):  python data-pipeline/benchmark_api.py [--years=N] OB48 AUB3 …
+Usage (by the website server, server/routes/api.js):  python data-pipeline/benchmark_api.py [--years=N] OB48 AUB3 …
 Output (stdout, JSON): { "from": "YYYY-MM-DD", "series": { "<code>": { "name", "dates": [...], "values": ["34669.85", ...] } },
                          "missing": [codes not stored] }
 Daily prices from YEARS_BACK years (plus the lookup margin), exact decimal strings, from the benchmark bucket

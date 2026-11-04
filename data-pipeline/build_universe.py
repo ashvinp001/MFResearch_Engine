@@ -64,7 +64,7 @@ def resolve(rows, master, pulse: dict | None = None) -> tuple[list, list, list]:
         if filled:
             verdicts[row.scheme_code] = filled
     by_code = {row.scheme_code: row for row in rows}
-    as_of = max(row.nav_date for row in rows) if rows else None
+    as_of = data_date(rows)
     live = lambda code: (as_of - by_code[code].nav_date).days <= ACTIVE_WINDOW_DAYS  # noqa: E731
 
     # Side-pockets and unclaimed-money plans are named unambiguously in the Scheme Master
@@ -146,11 +146,20 @@ def resolve(rows, master, pulse: dict | None = None) -> tuple[list, list, list]:
         (included if isinstance(verdict, Included) else excluded).append((row, verdict))
     return included, excluded, warnings
 
+def data_date(rows, today=None):
+    """The date of AMFI's data: its latest NAV date that is not after today. Before a weekend or holiday a single
+    overnight fund can publish a NAV dated days ahead (e.g. Friday's file with a Sunday NAV); that one row must not
+    move the date of every other fund."""
+    today = today or settings.india_today()
+    dates = [row.nav_date for row in rows]
+    return max([day for day in dates if day <= today] or dates, default=None)
+
+
 def build(text: str, master_text: str | None, previous: list[dict], pulse: dict | None = None) -> tuple[list[dict], dict]:
     """-> (schemes for the lists, the run report). Pure: reads nothing else, writes nothing."""
     rows = parse_nav_file(text)
     master = parse_scheme_master(master_text) if master_text else {}
-    data_as_of = max(row.nav_date for row in rows)
+    data_as_of = data_date(rows)
     included_rows, excluded_rows, warnings = resolve(rows, master, pulse)
 
     schemes = []

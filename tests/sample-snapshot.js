@@ -3,7 +3,7 @@
  * compare our one-pager against the sample. The top-6 holdings and all totals
  * match the sample exactly (invested ₹5,72,050, current ₹5,70,982). The 7 smaller
  * funds are illustrative and sum to the sample's "Other holdings" row.
- * Fund-level analytics are the sample's printed figures (stand-in for Phase 2 data).
+ * Fund-level analytics are the sample's printed figures.
  */
 
 import { createHolding, createPortfolio } from "../calculation-engine/model/portfolio.schema.js";
@@ -66,7 +66,7 @@ export const SAMPLE_FUND_DATA = {
   risk: { alpha: 7.8, beta: 0.75, stdDev: 14.0, sharpe: 1.04, benchmark: { beta: 1.0, stdDev: 18.0, sharpe: 0.5 } },
   coverage: { covered: 11, total: 13 },
   xirr: -0.4,
-  // Per-fund analytics as printed in "Portfolio Review & Recommendation" (stand-in for Phase 2 data).
+  // Per-fund analytics as printed in "Portfolio Review & Recommendation".
   funds: {
     INF200K01T28: fund("equity", "Thematic Fund", "Nifty 500 TRI", [-4.54, 15.22, 11.05], NIFTY500, [70, 22, 8]),
     INF879O01027: fund("equity", "Flexi/Multi Cap", "Nifty 500 TRI", [-5.9, 12.25, 10.82], NIFTY500, [60, 28, 12]),

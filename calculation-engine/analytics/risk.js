@@ -17,6 +17,7 @@
  */
 
 import { RISK } from "../config.js";
+import { mean } from "./stats.js";
 
 export function lastCompletedMonthEnd(anchorDate) {
   const [y, m] = anchorDate.split("-").map(Number);
@@ -31,8 +32,6 @@ export function monthEnds(lastMonthEnd, count) {
   }
   return out;
 }
-
-const mean = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
 
 /** Sample variance / covariance (n − 1), as Excel STDEV.S / COVARIANCE.S. */
 function sampleCovariance(xs, ys) {

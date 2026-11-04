@@ -1,6 +1,6 @@
 /**
  * Fund Scorecard — internal research: every fund of a category rated 0–100 and ranked (engine research/fund-scorecard.js),
- * shown beside the Recommendation Logic's grade for the same fund (auto-recommendation.js gradeFund).
+ * shown beside the Recommendation Logic's grade for the same fund (fund-grading.js gradeFund).
  *
  * renderFundScorecardPage(view)
  *   Category tabs (Equity) · plan switch · summary · top three · ranked list (each row opens every measure with its
@@ -10,14 +10,16 @@
 
 import { h } from "../../design-system/components/dom.js";
 import { Icon } from "../../design-system/components/icons.js";
-import { SCORECARD } from "../../calculation-engine/config.js";
-import { backtestCategory, gradeFund, resolveSettings, SCORECARD_PILLARS, scoreCategory, scoreIndexCategory } from "../../calculation-engine/index.js";
+import { backtestCategory, gradeFund, lastMove, quarterlyQuartiles, recentPoints, resolveSettings, SCORECARD, SCORECARD_PILLARS, scoreCategory, scoreIndexCategory } from "../../calculation-engine/index.js";
 import { loadScorecardSettings } from "../shared/market-data.js";
 import { DASH, formatDate } from "../shared/format.js";
 import { EQUITY_CATEGORIES } from "./fund-research/research-config.js";
 import { OWN_INDEX_CATEGORIES, scorecardData } from "./fund-scorecard/scorecard-data.js";
 import { openPasswordDialog, openSettingsDialog } from "./fund-scorecard/settings-dialog.js";
 import { INDEX_CARD, INDEX_GROUPS, INDEX_SCORECARD, SCORECARD_LIVE } from "./fund-scorecard/scorecard-config.js";
+import { indexCloses, liveBand } from "../shared/live-band.js";
+import { openFundDialog } from "./fund-scorecard/fund-dialog.js";
+import { formatMeasure, quartilePill } from "./fund-scorecard/scorecard-parts.js";
 
 const PLANS = ["Regular", "Direct"];
 const PILLAR_COLOR = { returns: "blue", riskAdjusted: "violet", benchmark: "teal", volatility: "amber", downside: "red", consistency: "green", quality: "steel",
@@ -94,13 +96,25 @@ export function renderFundScorecardPage(view) {
   const results = h("div", { class: "fsc-results" });
   const side = h("div", { class: "fsc-side" });
 
+  /** One wave through the category boxes, spreading out from the box just clicked. */
+  function waveFrom(from) {
+    chips.querySelectorAll(".fsc-cat-card").forEach((box, i) => {
+      box.style.setProperty("--d", `${Math.abs(i - from) * 80}ms`);
+      box.classList.remove("is-wave");
+      void box.offsetWidth;   // restarts the animation when a wave is already running
+      box.classList.add("is-wave");
+      box.addEventListener("animationend", () => box.classList.remove("is-wave"), { once: true });
+    });
+  }
+
   // Category selector: the live categories as colour cards; the rest in a quieter "mapping in progress" row.
   function drawChips() {
     const pick = (c) => () => { if (state.category !== c) { state.category = c; state.open.clear(); drawChips(); load(); } };
     const live = EQUITY_CATEGORIES.filter((c) => SCORECARD_LIVE.has(c.slug));
     const soon = EQUITY_CATEGORIES.filter((c) => !SCORECARD_LIVE.has(c.slug));
-    const card = (c, on, sub, onclick) => h("button", { type: "button", role: "tab", class: `fsc-cat-card${on ? " is-on" : ""}`, "aria-selected": String(on),
-      style: { "--accent": `var(--${c.accent})` }, onclick },
+    const card = (c, on, sub, onclick, i) => h("button", { type: "button", role: "tab", class: `fsc-cat-card${on ? " is-on" : ""}`, "aria-selected": String(on),
+      style: { "--accent": `var(--${c.accent})` },
+      onclick: () => { onclick(); waveFrom(i); } },
       h("span", { class: "fsc-cat-card-icon" }, Icon(c.icon, { size: 20, strokeWidth: 1.9 })),
       h("span", { class: "fsc-cat-card-text" }, h("b", {}, c.name), h("small", {}, sub)),
       on ? h("span", { class: "fsc-cat-card-check" }, Icon("check", { size: 14, strokeWidth: 3 })) : null);
@@ -108,14 +122,13 @@ export function renderFundScorecardPage(view) {
     // replaceChildren would print a null as the text "null": the rows that are not shown are left out.
     chips.replaceChildren(...[
       h("div", { class: "fsc-cat-cards", role: "tablist", "aria-label": "Category" },
-        live.map((c) => card(c, c === state.category, `vs ${c.benchmark.name}`, pick(c))),
+        live.map((c, i) => card(c, c === state.category, `vs ${c.benchmark.name}`, pick(c), i)),
         card(INDEX_CARD, indexOn, indexOn ? `${state.category.name} · ${INDEX_CARD.note}` : `${INDEX_SCORECARD.length} indices · ${INDEX_CARD.note}`,
-          indexOn ? () => {} : pick(INDEX_SCORECARD[0]))),
+          indexOn ? () => {} : pick(INDEX_SCORECARD[0]), live.length)),
       // Index Funds: its sub-categories (the tracked indices), compact and grouped by family.
-      indexOn ? h("div", { class: "fsc-sub-row", role: "tablist", "aria-label": "Index" }, INDEX_GROUPS.map((g) => h("div", { class: "fsc-sub-group" },
-        h("span", { class: "fsc-sub-label" }, g.label),
-        g.items.map((c) => h("button", { type: "button", role: "tab", class: `fsc-sub-pill${c === state.category ? " is-on" : ""}`, "aria-selected": String(c === state.category),
-          style: { "--accent": `var(--${c.accent})` }, onclick: pick(c) }, c.name))))) : null,
+      indexOn ? h("div", { class: "fsc-idx-row", role: "tablist", "aria-label": "Index" }, INDEX_GROUPS.map((g) => h("section", { class: `fsc-idx-group is-${g.family}`, style: { "--tiles": g.items.length } },
+        h("h3", {}, g.label),
+        h("div", { class: "fsc-idx-tiles" }, g.items.map((c) => indexTile(c, c === state.category, state.indexCloses?.[c.code]?.series, pick(c))))))) : null,
       soon.length ? h("div", { class: "fsc-soon-row" },
         h("span", { class: "fsc-soon-label" }, Icon("refresh", { size: 13, strokeWidth: 2.2 }), "Mapping in progress"),
         soon.map((c) => h("button", { type: "button", role: "tab", class: `fsc-soon-pill${c === state.category ? " is-on" : ""}`, "aria-selected": String(c === state.category),
@@ -166,7 +179,7 @@ export function renderFundScorecardPage(view) {
       return gradeFund({ scheme: fund.scheme, name: fund.name, stats, group: stats ? peers.groups?.[stats.group] ?? null : null, statsAsOf: peers?.asOf ?? null }).grade;
     };
     drawHead(data.asOf);
-    results.replaceChildren(...summary(card), ...(card.categoryReason ? [notice(card.categoryReason)] : [podium(card, gradeOf), ranked(card, gradeOf, byCode)]), notRated(card));
+    results.replaceChildren(...summary(card), ...(card.categoryReason ? [notice(card.categoryReason)] : [podium(card, gradeOf, byCode), ranked(card, gradeOf, byCode)]), notRated(card));
     side.replaceChildren(settingsPanel(card), modelCheck(check, card), method(state.category, data));
   }
 
@@ -187,25 +200,62 @@ export function renderFundScorecardPage(view) {
   function summary(card) {
     const scores = card.rated.map((r) => r.score).sort((a, b) => a - b);
     const median = scores.length ? (scores.length % 2 ? scores[(scores.length - 1) / 2] : (scores[scores.length / 2 - 1] + scores[scores.length / 2]) / 2) : null;
-    const tile = (label, value, note, tone) => h("div", { class: `fsc-tile${tone ? ` is-${tone}` : ""}` }, h("span", {}, label), h("b", {}, value), note ? h("small", {}, note) : null);
+    const tile = (label, value, note, tone, onclick) => h(onclick ? "button" : "div", { type: onclick ? "button" : null, class: `fsc-tile${tone ? ` is-${tone}` : ""}${onclick ? " is-link" : ""}`, onclick },
+      h("span", {}, label), h("b", {}, value), note ? h("small", {}, note) : null);
+    // Funds rated / Not rated take you down to their list; the Not rated list opens on arrival.
+    const showList = (selector) => () => {
+      const list = results.querySelector(selector);
+      if (!list) return;
+      if (list.tagName === "DETAILS") list.open = true;
+      list.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    };
     return [h("div", { class: "fsc-tiles" },
-      tile("Funds rated", String(card.rated.length), `of ${card.rated.length + card.notRated.length} in the category`, "blue"),
-      tile("Not rated", String(card.notRated.length), "new, stale, small or incomplete data", "amber"),
+      tile("Funds rated", String(card.rated.length), `of ${card.rated.length + card.notRated.length} in the category`, "blue", card.rated.length && !card.categoryReason ? showList(".fsc-ranked") : null),
+      tile("Not rated", String(card.notRated.length), "new, stale, small or incomplete data", "amber", card.notRated.length ? showList(".fsc-notrated") : null),
       tile("Top score", card.rated[0] ? card.rated[0].score.toFixed(1) : DASH, card.rated[0]?.name ?? "", "green"),
       tile("Median score", median === null ? DASH : median.toFixed(1), "50 = middle of the category", "violet"))];
   }
 
-  function podium(card, gradeOf) {
+  // The popup behind a top-three card: past quarters are scored with the same settings, as the Model check does.
+  function openFund(r, card, grade, byCode) {
+    const fund = byCode.get(r.code);
+    const index = isIndex(state.category), { settings } = state.settingsInfo;
+    const scored = new Map();   // each past quarter is scored once, however many funds are compared
+    const score = (asOf) => {
+      if (!scored.has(asOf)) scored.set(asOf, index ? scoreIndexCategory({ funds: data.funds, asOf })
+        : scoreCategory({ funds: data.funds, benchmark: data.benchmark, asOf, settings, ignoreAum: true }));
+      return scored.get(asOf);
+    };
+    const peers = card.rated.slice(0, 3).filter((x) => x.code !== r.code).map((x) => ({ code: x.code, name: x.name, series: byCode.get(x.code).series }));
+    openFundDialog({ fund, rated: r, card, grade, peers, benchmark: fund.benchmarkSeries ?? data.benchmark,
+      benchmarkName: fund.benchmarkName ?? state.category.index?.name ?? state.category.benchmark.name,
+      quarters: (code) => quarterlyQuartiles({ score, code, asOf: data.asOf }) });
+  }
+
+  function podium(card, gradeOf, byCode) {
     const medals = ["gold", "silver", "bronze"];
     return h("section", { class: "fsc-podium", "aria-label": "Top three" }, card.rated.slice(0, 3).map((r, i) => {
       const strongest = [...card.pillars].filter((p) => card.weights[p.key] > 0 && r.pillars[p.key] !== null)
         .sort((a, b) => r.pillars[b.key] - r.pillars[a.key]).slice(0, 3);
       const grade = GRADE[gradeOf(r.code)] ?? GRADE.REVIEW;
-      return h("article", { class: `fsc-medal is-${medals[i]}` },
-        h("div", { class: "fsc-medal-top" }, h("span", { class: "fsc-medal-rank" }, `#${r.rank}`), ring(r.score, r.quartile)),
-        h("h3", {}, r.name),
-        h("div", { class: "fsc-medal-tags" }, quartilePill(r.quartile), gradeGauge(grade)),
-        h("ul", {}, strongest.map((p) => h("li", {}, h("i", { style: { background: `var(--${PILLAR_COLOR[p.key]})` } }), `${p.label}`, h("b", {}, Math.round(r.pillars[p.key]))))));
+      const aum = r.measures.aum?.value;
+      const open = () => openFund(r, card, grade, byCode);
+      return h("article", { class: `fsc-medal is-${medals[i]}`, role: "button", tabindex: "0", "aria-label": `${r.name}: open full analysis`, onclick: open,
+        onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } },
+        h("header", { class: "fsc-medal-top" },
+          h("div", { class: "fsc-medal-title" }, h("span", { class: "fsc-medal-rank" }, `Rank ${r.rank}`), h("h3", {}, r.name)),
+          h("div", { class: "fsc-medal-score" }, h("b", {}, r.score.toFixed(1)), h("span", {}, "out of 100"))),
+        h("dl", { class: "fsc-medal-facts" },
+          h("div", {}, h("dt", {}, "Quartile"), h("dd", {}, quartilePill(r.quartile))),
+          h("div", {}, h("dt", {}, "Prosperr grade"), h("dd", { class: `is-${grade.tone}` }, grade.label)),
+          h("div", {}, h("dt", {}, "AUM"), h("dd", {}, aum === null || aum === undefined ? DASH : `₹${Math.round(aum).toLocaleString("en-IN")} Cr`))),
+        h("div", { class: "fsc-medal-body" },
+          h("h4", {}, "Strongest pillars"),
+          h("ul", {}, strongest.map((p) => {
+            const v = Math.round(r.pillars[p.key]);
+            return h("li", {}, h("span", {}, p.label), h("span", { class: "fsc-medal-bar", "aria-hidden": "true" }, h("i", { style: { width: `${v}%` } })), h("b", {}, String(v)));
+          }))),
+        h("footer", { class: "fsc-medal-foot" }, "View full analysis", Icon("arrowRight", { size: 14, strokeWidth: 2.4 })));
     }));
   }
 
@@ -233,7 +283,7 @@ export function renderFundScorecardPage(view) {
       body.append(row);
       if (open) body.append(h("tr", { class: "fsc-detail" }, h("td", { colspan: 8 }, detail(r, card, disagree))));
     }
-    return h("section", { class: "fsc-card" },
+    return h("section", { class: "fsc-card fsc-ranked" },
       h("div", { class: "fsc-card-head" }, h("h3", {}, "Ranked list"), h("p", {}, "Click a fund to see every measure — its value and where it stands in the category (percentile).")),
       h("div", { class: "fsc-legend" }, pillars.map((p) => h("span", {}, h("i", { style: { background: `var(--${PILLAR_COLOR[p.key]})` } }), `${p.label} ${card.weights[p.key]}%`))),
       h("div", { class: "fsc-table-wrap" }, h("table", { class: "fsc-table" },
@@ -339,28 +389,33 @@ export function renderFundScorecardPage(view) {
 
   drawChips();
   load();
+  indexCloses().then((closes) => { state.indexCloses = closes; if (isIndex(state.category)) drawChips(); });
+  const live = liveBand();
   view.replaceChildren(h("main", { class: "fsc" },
     h("section", { class: "site-band frx-band" },
-      h("div", { class: "site-band-inner fsc-band" },
+      live.layer,
+      h("div", { class: "site-band-inner live-band-row" },
         h("div", {},
           h("div", { class: "ds-eyebrow" }, "Fund Research"),
           h("h1", {}, "Fund Scorecard"),
           h("p", { class: "frx-band-text" }, "Every fund rated within its SEBI category on returns, risk-adjusted return, benchmark, volatility, downside, consistency and fund quality — normalised, weighted and ranked.")),
-        h("span", { class: "fsc-internal" }, Icon("lock", { size: 14 }), "Internal use only"))),
+        h("div", { class: "live-band-end" }, live.pulse, h("span", { class: "fsc-internal" }, Icon("lock", { size: 14 }), "Internal use only")))),
+    live.ticker,
     h("div", { class: "home-container fsc-body" }, chips, head, h("div", { class: "fsc-layout" }, results, side))));
 }
 
 // ---------- small pieces ----------
-function quartilePill(q) {
-  return h("span", { class: `fsc-q is-q${q}` }, q ? `Q${q}` : DASH);
-}
-
-function ring(score, quartile) {
-  const r = 26, c = 2 * Math.PI * r;
-  return h("svg", { class: `fsc-ring is-q${quartile}`, viewBox: "0 0 64 64", role: "img", "aria-label": `Score ${score.toFixed(1)} of 100` },
-    h("circle", { cx: 32, cy: 32, r, class: "fsc-ring-track" }),
-    h("circle", { cx: 32, cy: 32, r, class: "fsc-ring-fill", "stroke-dasharray": `${(score / 100) * c} ${c}`, transform: "rotate(-90 32 32)" }),
-    h("text", { x: 32, y: 37, "text-anchor": "middle" }, score.toFixed(1)));
+/** One index as a small market tile: name, its last 30 days and its latest move (▲ / ▼ and sign, never colour alone). */
+function indexTile(c, on, series, onclick) {
+  const move = series ? lastMove(series) : null;
+  const up = move ? move.change >= 0 : true;
+  const { values } = series ? recentPoints(series, 30) : { values: [] };
+  const min = Math.min(...values), span = Math.max(...values) - min || 1;
+  const path = values.map((v, i) => `${i ? "L" : "M"}${((i / (values.length - 1)) * 100).toFixed(1)},${(22 - ((v - min) / span) * 20).toFixed(1)}`).join("");
+  return h("button", { type: "button", role: "tab", class: `fsc-idx${on ? " is-on" : ""}${up ? " is-up" : " is-down"}`, "aria-selected": String(on), onclick },
+    h("b", {}, c.name),
+    values.length > 1 ? h("svg", { viewBox: "0 0 100 24", preserveAspectRatio: "none", "aria-hidden": "true" }, h("path", { d: path })) : h("span", { class: "fsc-idx-gap" }),
+    h("small", {}, move ? `${up ? "▲ +" : "▼ −"}${Math.abs(move.change * 100).toFixed(2)}%` : " "));
 }
 
 /** A category rated by the engine but not switched on yet: no figures shown, nothing loaded. */
@@ -382,15 +437,4 @@ function skeleton(category) {
   return h("div", { class: "fsc-card frx-skeleton", "aria-busy": "true" },
     h("p", { class: "fsc-sub" }, `Rating ${category.name} funds — loading 12 years of NAVs and computing every measure…`),
     Array.from({ length: 7 }, (_, i) => h("div", { class: "frx-sk-row" }, bar(`${34 + ((i * 9) % 20)}%`), bar("10%"), bar("8%"), bar("14%"))));
-}
-
-function formatMeasure(m, value, r) {
-  if (value === null || value === undefined) return DASH;
-  if (m.unit === "pct") return `${value >= 0 ? "" : "−"}${Math.abs(value * 100).toFixed(2)}%`;
-  if (m.unit === "ratio") return value.toFixed(2);
-  if (m.unit === "share") return `${Math.round(value)}%`;
-  if (m.unit === "num") return value.toFixed(1);
-  if (m.unit === "days") return `${Math.round(value)} days${r.recovered === false ? " (not yet recovered)" : ""}`;
-  if (m.unit === "cr") return `₹${Math.round(value).toLocaleString("en-IN")} Cr`;
-  return String(value);
 }

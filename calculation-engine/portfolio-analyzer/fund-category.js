@@ -1,7 +1,7 @@
 /**
  * SEBI fund category of a holding — needed for the Risk Profile and Horizon logic.
  *
- * Input:  a holding, and its fund info from fundData (Phase 2, may be null).
+ * Input:  a holding, and its fund info from fundData (may be null).
  * Output: { category, source: "fund data" | "scheme name" | "not in the logic tables" } — category "others"
  *         when the fund fits no row of the Risk / Horizon tables.
  *
@@ -121,7 +121,7 @@ const OTHERS_REASONS = [
   [/commodit/, "Commodities fund"],
 ];
 
-export function othersReason(holding, info = null) {
+function othersReason(holding, info = null) {
   const text = `${info?.category ?? ""} ${holding.schemeName ?? ""}`.toLowerCase();
   const found = OTHERS_REASONS.find(([pattern]) => pattern.test(text));
   if (found) return `${found[1]} — not in the Risk / Horizon tables`;

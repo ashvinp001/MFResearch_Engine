@@ -1,7 +1,7 @@
 /**
  * Portfolio Snapshot (one-pager) — every number on the factsheet.
  *
- * Input:  a validated portfolio; fundData from market/fund-data-provider.js (null until Phase 2);
+ * Input:  a validated portfolio; fundData from buildFundData (may be null);
  *         options { topN } — funds listed individually before "Other holdings"
  *         (default: every active holding is listed, so there is no "Other" row).
  * Holdings with zero closing units (redeemed) are never listed.

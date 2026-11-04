@@ -3,7 +3,6 @@
  * them — no business logic, no raw colors (tokens only).
  *
  *  Logo({ size })                         brand mark with text fallback
- *  SectionHeader({ eyebrow, title, aside }) eye-label + title + gradient divider
  *  KpiCard({ label, value, sub, accent, tone })
  *  Badge({ text, tone })                  tone ∈ positive|negative|info|warning|neutral
  *  Callout({ tone, title, items, body })
@@ -15,29 +14,14 @@ import { TONE } from "../tokens.js";
 import { Icon } from "./icons.js";
 
 // Resolved from this module's location, so the logo loads from any page depth.
-const LOGO_SRC = {
-  default: new URL("../../assets/prosperr-logo.png", import.meta.url).href,
-  light: new URL("../../assets/prosperr-logo-light.png", import.meta.url).href,
-};
+const LOGO_SRC = new URL("../../assets/prosperr-logo.png", import.meta.url).href;
 
-/** Transparent logo; variant "light" uses white ink for dark backgrounds. */
-export function Logo({ size = 32, variant = "default" } = {}) {
+/** Transparent logo; brand mark with a text fallback. */
+export function Logo({ size = 32 } = {}) {
   const wordmark = h("span", { class: "ds-logo-wordmark" }, "Prosperr", h("span", { class: "ds-logo-tld" }, ".io"));
-  const img = h("img", { class: "ds-logo-img", src: LOGO_SRC[variant] ?? LOGO_SRC.default, alt: "Prosperr", height: size });
+  const img = h("img", { class: "ds-logo-img", src: LOGO_SRC, alt: "Prosperr", height: size });
   img.addEventListener("error", () => img.replaceWith(wordmark));
-  return h("span", { class: `ds-logo ds-logo-${variant}`, style: { "--logo-size": `${size}px` } }, img);
-}
-
-export function SectionHeader({ eyebrow, title, aside }) {
-  return h(
-    "header",
-    { class: "ds-section-header" },
-    h("div", { class: "ds-section-header-row" },
-      h("div", {}, eyebrow ? h("div", { class: "ds-eyebrow" }, eyebrow) : null, h("h2", {}, title)),
-      aside ?? null
-    ),
-    h("div", { class: "ds-divider" })
-  );
+  return h("span", { class: "ds-logo", style: { "--logo-size": `${size}px` } }, img);
 }
 
 export function KpiCard({ label, value, sub, accent, tone, icon }) {

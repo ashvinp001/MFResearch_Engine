@@ -1,13 +1,13 @@
 /**
  * Portfolio and fund performance from NAV history (MF_Calculation_Engine.md E15.5.9).
  *
- * buildFundData({ portfolio, schemeMap, histories }) → FundData (see market/fund-data-provider.js)
+ * buildFundData({ portfolio, schemeMap, histories }) → FundData (typedef below)
  *   portfolio  — validated (and revalued) NormalizedPortfolio
  *   schemeMap  — buildSchemeMap(data/schemes lists): ISIN → AMFI scheme
  *   histories  — { [schemeCode]: navSeries(...) } daily NAVs (E1 series), from the NAV store
  *
  * Per fund (keyed by ISIN): 1Y / 3Y / 5Y trailing returns by E2 at the fund's own ANCHOR (latest NAV),
- * AMFI category, asset group. Benchmark figures stay null until index data is connected.
+ * AMFI category, asset group.
  *
  * Portfolio (the client's CURRENT units, looked back — "current holdings" method):
  *   T = the latest NAV date across the portfolio's funds. A fund's NAV on any date d is E1
@@ -21,6 +21,26 @@
  *   A portfolio figure is published only when its eligible funds hold ≥ PORTFOLIO_ANALYTICS.minValueCoverage
  *   of the portfolio's current value (all active holdings); otherwise null ("—"). Never extrapolated.
  * Percent outputs (12.34 = 12.34%) at this boundary, as the reports expect.
+ *
+ * @typedef {Object} FundData
+ * @property {string} benchmarkName                         e.g. "Nifty 500"
+ * @property {{ equity:number, debt:number, goldSilver:number } | null} composition   % of portfolio
+ * @property {{ sector:string, pct:number }[] | null} sectors                         % of equity, ranked
+ * @property {{ large:number, mid:number, small:number } | null} marketCap            % of equity
+ * @property {{ period:"1Y"|"3Y"|"5Y", portfolio:number, benchmark:number }[] | null} trailingReturns  % p.a.
+ * @property {{ alpha:number, beta:number, stdDev:number, sharpe:number,
+ *              benchmark:{ beta:number, stdDev:number, sharpe:number } } | null} risk   3-year
+ * @property {{ covered:number, total:number } | null} coverage   funds with NAV history
+ * @property {number | null} xirr                                  portfolio XIRR, %
+ * @property {{ [isin:string]: FundInfo } | null} funds            per-fund analytics
+ *
+ * @typedef {Object} FundInfo
+ * @property {"equity"|"hybrid"|"debt"|"goldSilver"|null} assetClass
+ * @property {string} category                                     e.g. "Mid Cap", "Flexi/Multi Cap"
+ * @property {string} benchmark                                    e.g. "Nifty Midcap 150 TRI"
+ * @property {{ r1y:number|null, r3y:number|null, r5y:number|null }} returns           % (3Y/5Y annualised)
+ * @property {{ r1y:number|null, r3y:number|null, r5y:number|null }} benchmarkReturns
+ * @property {{ large:number, mid:number, small:number } | null} marketCap               % of the fund's equity
  */
 
 import { PORTFOLIO_ANALYTICS, RISK } from "../config.js";

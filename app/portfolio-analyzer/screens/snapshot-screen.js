@@ -21,6 +21,7 @@ import { DASH, benchmarkPhrase } from "../../shared/format.js";
 import { printElement } from "../../shared/print.js";
 import { autoDetails, autoNote } from "../report-profile-notes.js";
 import { marketCapBlock } from "../reports/market-cap-view.js";
+import { overlapSummaryData } from "../reports/detailed/section-overlap.js";
 
 export function createSnapshotScreen({ portfolio, summary, snapshot, profile = null, store, onChange, overlap = null }) {
   // Risk profile and horizon are pre-filled by the Prosperr logic (engine buildReportProfile); editable.
@@ -84,7 +85,7 @@ function overlapView(o) {
     h("th", { scope: "row", class: "snp-ov-name" }, h("span", { class: "snp-ov-n" }, String(f.n)), f.name),
     ...o.funds.map((g, j) => {
       if (j > i) return h("td", { class: "snp-ov-empty" });
-      if (i === j) return h("td", { class: "snp-ov-cell is-self" }, String(f.n));
+      if (i === j) return h("td", { class: "snp-ov-cell is-self", title: f.name }, DASH);
       const p = at.get(`${Math.min(g.n, f.n)}-${Math.max(g.n, f.n)}`);
       return p ? h("td", { class: `snp-ov-cell is-${band(p.overlap)}`, title: `${f.name} vs ${g.name}: ${Math.round(p.overlap * 100)}%` }, `${Math.round(p.overlap * 100)}%`)
         : h("td", { class: "snp-ov-cell" }, DASH);
@@ -98,7 +99,14 @@ function overlapView(o) {
       h("span", {}, h("i", { class: "is-moderate" }), "Moderate — 25% to 50%"),
       h("span", {}, h("i", { class: "is-high" }), "High — 50% and above"),
       h("span", { class: "ds-muted" }, `${o.buckets.high.length} high · ${o.buckets.moderate.length} moderate · ${o.buckets.low.length} low pairs${o.asOn ? ` · holdings as disclosed for ${o.asOn}` : ""}`)),
-    h("p", { class: "ds-muted snp-ov-note" }, "Equity and hybrid funds are compared; a fund in several folios or in both plans counts once. Debt, gold & silver funds, funds of funds and arbitrage funds are not compared."));
+    h("p", { class: "ds-muted snp-ov-note" }, "Equity and hybrid funds are compared; a fund in several folios or in both plans counts once. Debt, gold & silver funds, funds of funds and arbitrage funds are not compared."),
+    // The same Overlap Summary as the Detailed report's PDF (shared content: reports/detailed-report.js overlapSummaryData).
+    h("div", { class: "snp-ovs" }, h("div", { class: "ds-eyebrow" }, "Overlap summary"), overlapSummaryData(o).map((b) => h("div", { class: `snp-ovs-box is-${b.key}` },
+      h("div", { class: "snp-ovs-head" }, h("i"), h("strong", {}, b.title), h("span", {}, b.range), h("b", {}, b.countText)),
+      h("p", {}, b.comment),
+      b.funds ? h("ul", { class: "is-funds" }, h("li", { class: "snp-ovs-label" }, b.fundsLabel), b.funds.map((name) => h("li", {}, name)))
+        : b.pairs.length ? h("ul", {}, b.pairs.map((p) => h("li", {}, h("b", {}, p.pct), `${p.a}  vs  ${p.b}`))) : null,
+      b.more ? h("p", { class: "snp-ovs-more" }, b.more) : null))));
 }
 
 // ---------- Holdings ----------

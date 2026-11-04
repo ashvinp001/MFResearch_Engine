@@ -26,7 +26,7 @@ export function suggestedStrategy(snapshot) {
   if (c?.debt > 0) roles.push("debt for stability");
   if (c?.goldSilver > 0) roles.push("a gold/silver hedge");
   const roleText = roles.length ? ` — ${roles.length > 1 ? `${roles.slice(0, -1).join(", ")} and ${roles.at(-1)}` : roles[0]}` : "";
-  return `A diversified allocation across ${snapshot.fundCount} funds and ${snapshot.amcCount} fund houses${roleText}. ` +
+  return `An allocation across ${snapshot.fundCount} fund${snapshot.fundCount === 1 ? "" : "s"} and ${snapshot.amcCount} fund house${snapshot.amcCount === 1 ? "" : "s"}${roleText}. ` +
     `As per the Consolidated Account Statement as on ${formatSnapshotDate(snapshot.asOf)}.`;
 }
 

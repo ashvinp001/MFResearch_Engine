@@ -7,38 +7,13 @@ body { background: var(--surface-alt); min-height: calc(100 * var(--vh)); }
 
 button, input { font: inherit; }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); }
-
-.ds-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.ds-topbar::after { content: ""; display: block; height: 3px; background: var(--grad-divider); }
-.ds-topbar-inner {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: var(--sp-3) var(--page-gutter);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-.ds-topbar-title { font-family: var(--font-display); font-weight: 700; color: var(--color-primary); }
-.ds-topbar-spacer { flex: 1; }
-
-.ds-page { max-width: var(--content-max); margin: 0 auto; padding: var(--sp-5) var(--page-gutter) var(--sp-6); }
-.ds-stack { display: grid; gap: var(--sp-5); }
 .ds-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .ds-col-4 { grid-column: span 4; }
 .ds-col-5 { grid-column: span 5; }
-.ds-col-6 { grid-column: span 6; }
 .ds-col-7 { grid-column: span 7; }
-.ds-col-12 { grid-column: span 12; }
-.ds-kpi-row { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 
 @media (max-width: 900px) {
-  .ds-col-4, .ds-col-5, .ds-col-6, .ds-col-7 { grid-column: span 12; }
+  .ds-col-4, .ds-col-5, .ds-col-7 { grid-column: span 12; }
 }
 
 /* Buttons */

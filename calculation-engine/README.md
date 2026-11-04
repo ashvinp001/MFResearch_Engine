@@ -4,7 +4,7 @@ Core 1: **all calculation.** It covers CAS parsing, validation, identity, the po
 the report-profile rules. It has no DOM, no CSS, no colors and no AI.
 
 **Specification:** every rule implemented here is specified in
-[`MF_Calculation_Engine.md`](../MF_Calculation_Engine.md), section E15 — the single source of truth.
+[`MF_Calculation_Engine.md`](../docs/MF_Calculation_Engine.md), section E15 — the single source of truth.
 A logic change is made there first, then here.
 
 `index.js` is the public API. The app imports from there and never from deeper files.
@@ -19,14 +19,15 @@ A logic change is made there first, then here.
 | `CasError`, `CAS_ERROR`, `CAS_FORMAT`, `FLAG` | Error codes, formats and validation flags |
 | `isValidIsin`, `holdingKey` | ISIN check digit; stable holding identity (`ISIN\|folio`) |
 | `summarizePortfolio`, `holdingGain` | Headline figures from printed values |
-| `summarizeRecommendations`, `VERDICT(S)`, `excessReturn` | Invest / Hold / Sell summary |
-| `allocatePortfolio`, `percentToBps` | Exact recommended-portfolio allocation |
+| `summarizeRecommendations` | Invest / Hold / Sell summary |
+| `allocatePortfolio` | Exact recommended-portfolio allocation |
 | `buildSnapshot` | One-Pager model |
-| `buildDetailedReport`, `ASSET_GROUPS` | Detailed Report model |
+| `buildDetailedReport` | Detailed Report model |
 | `buildReportProfile`, `diversificationStatus`, `RISK_PROFILE_LABELS`, `HORIZON_LABELS`, `DIVERSIFICATION_STATUS` | Diversification, Risk Profile and Horizon (Report details) |
 | `classifyFund`, `categoryFromText`, `FUND_CATEGORY` | SEBI fund category of a holding |
-| `suggestVerdicts`, `fundMetrics`, `validateRules`, `RULE_METRICS`, `RULE_OPERATORS` | Rule-based Invest / Hold / Sell suggestions (inactive until rules are set) |
-| `getFundData`, `trailingReturns`, `xirr`, `riskMetrics` | Phase 2 interfaces (return `null`) |
+| `autoRecommend`, `gradeFund` | Invest / Hold / Sell logic (Recommendation_Logic.md) |
+| `buildFundData`, `navSeries`, `trailingReturn`, `xirr`, `riskMetrics` | Returns and risk from NAV history |
+| `scoreCategory`, `scoreIndexCategory` | Fund Scorecard and Index Scorecard |
 
 ## Layout
 
@@ -36,11 +37,12 @@ config.js               every tolerance and tunable
 errors.js               CasError + codes
 model/                  NormalizedPortfolio contract
 cas/                    extract → detect → parse → normalize → validate
-identity/               ISIN; ISIN → scheme map (Phase 2)
-market/                 NAV and fund-data providers (Phase 2)
-analytics/              returns and risk (Phase 2)
-portfolio-analyzer/     summary, recommendation, allocation, snapshot, detailed-report,
-                        report-profile, fund-category and verdict-rule models
+identity/               ISIN; ISIN → scheme map
+analytics/              returns, risk and shared numeric helpers
+research/               Fund Scorecard, Index Scorecard, returns table
+portfolio-analyzer/     auto-recommendation → fund-grading (one fund) + portfolio-fit (portfolio rules),
+                        fund-overlap, summary, recommendation, allocation, snapshot, detailed-report,
+                        report-profile, fund-category and recommendation models
 ```
 
 ## Rules

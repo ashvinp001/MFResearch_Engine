@@ -1,7 +1,7 @@
 /**
  * Detailed Report model — every number in "Portfolio Review & Recommendation".
  *
- * Input:  { portfolio, fundData (Phase 2, may be null), verdicts { [holdingKey]: verdict }, allocation (allocatePortfolio result),
+ * Input:  { portfolio, fundData (may be null), verdicts { [holdingKey]: verdict }, allocation (allocatePortfolio result),
  *           suggestions (Suggestion Box points from autoRecommend, [{ id, text }]),
  *           calls (autoRecommend suggestions by holding key — the basis of each call, for the commentary),
  *           fundHoldings ({ [isin]: { asOn, holdings } } from PulseDB — for the Portfolio Overlap matrix) }
@@ -13,6 +13,7 @@
  *   marketCapByFund: { rows: [ { name, large, mid, small } ], blended } | null,
  *   performance: [ { key, rows: [Row with returns] } ],                       // equity, hybrid, gold/silver; debt & ETFs excluded; one row per ISIN
  *   overlap: { funds, closest, pairs (high only), buckets: { high, moderate, low }, distinct, asOn } | null   // see overlapModel
+ *   leftovers: [ { name, folio, units } ]   // folios with 0 < units < 1 — to close (note after Recommended Exits)
  *   overlapApplies: boolean                                                   // false with only one fund: no Portfolio Overlap section
  *   portfolioReturns: [ { period, portfolio, benchmark, excess } ] | null,
  *   risk, coverage,
@@ -25,10 +26,10 @@
 import { holdingKey } from "../model/portfolio.schema.js";
 import { toPaise } from "../cas/parse-values.js";
 import { buildSnapshot } from "./snapshot.js";
-import { fundOverlap, sharedStocks } from "./auto-recommendation.js";
+import { fundOverlap, sharedStocks } from "./fund-overlap.js";
 import { groupFromMix } from "./portfolio-performance.js";
 
-export const ASSET_GROUPS = Object.freeze(["equity", "hybrid", "debt", "goldSilver"]);
+const ASSET_GROUPS = Object.freeze(["equity", "hybrid", "debt", "goldSilver"]);
 const PERIODS = ["r1y", "r3y", "r5y"];
 
 const byName = (p, q) => p.name.localeCompare(q.name, "en", { sensitivity: "base" });
@@ -59,7 +60,7 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
       // The logic's basis for its call (grade, stage) — used by the commentary only when the advisor kept that call.
       call: (() => {
         const s = calls[holdingKey(holding)];
-        return s && s.verdict && s.verdict === verdicts[holdingKey(holding)] ? { grade: s.grade, stage: s.stage ?? "fund" } : null;
+        return s && s.verdict && s.verdict === verdicts[holdingKey(holding)] ? { grade: s.grade, ruleId: s.ruleId ?? null, stage: s.stage ?? "fund", trim: s.trim ?? null, move: s.move ?? null } : null;
       })(),
       // AMFI class / category / name first; a fund of funds or solution fund the name cannot place goes by its
       // look-through holdings (65% rule). Anything still unplaced is shown under "OTHER", never under another heading.
@@ -161,6 +162,12 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
     coverage: snapshot.coverage,
     recommended: recommendedModel(allocation, rows, fundData),
     suggestions,   // Suggestion Box (autoRecommend flags): [{ id, text }]
+    // Folios left with a fraction of a unit (0 < units < 1, owner's rule): listed after Recommended Exits as folios to
+    // close — including leftovers too small to count as a holding (cas/normalize.js isNotHeld), which no report shows.
+    leftovers: portfolio.holdings
+      .filter((holding) => typeof holding.units === "number" && holding.units > 0 && holding.units < LEFTOVER_UNITS)
+      .map((holding) => ({ name: schemeName(holding.schemeName ?? holding.isin), folio: holding.folio ?? null, units: holding.raw.units ?? String(holding.units) }))
+      .sort(byName),
     overlap: overlapModel(rows, fundHoldings),
     // Portfolio Overlap needs at least two different funds; with one fund (in any number of folios) the section is left
     // out of the report and the sections after it move up.
@@ -186,9 +193,10 @@ function schemeKey(name) {
     .replace(/[^a-z0-9&]+/g, " ").trim();
 }
 
-export const OVERLAP_HIGH = 0.5;        // a pair at or above this share of the same stocks: high overlap (red)
-export const OVERLAP_LOW = 0.25;        // below this: low overlap (green); in between: moderate (amber)
-export const OVERLAP_NONE = 0.1;        // a fund whose closest overlap is below this is shown as having none
+const LEFTOVER_UNITS = 1;        // a folio holding less than one unit is a leftover to close (Recommended Exits note)
+export const OVERLAP_HIGH = 0.5;       // a pair at or above this share of the same stocks: high overlap (red)
+const OVERLAP_LOW = 0.25;        // below this: low overlap (green); in between: moderate (amber)
+const OVERLAP_NONE = 0.1;        // a fund whose closest overlap is below this is shown as having none
 
 // Compared: equity and hybrid funds (index funds and equity ETFs included). Left out: debt and gold / silver funds (no
 // stocks), funds of funds (owner's rule — they hold other funds) and arbitrage funds (their stock positions are hedged).
@@ -197,7 +205,7 @@ const comparedInOverlap = (row) => (row.assetClass === "equity" || row.assetClas
 
 /**
  * Portfolio Overlap (Section 04): for the client's equity and hybrid funds, the share of two funds' stock portfolios
- * invested in the same stocks (auto-recommendation.fundOverlap, 0–1; a hybrid fund's stock portion scaled to 100%).
+ * invested in the same stocks (fund-overlap.js fundOverlap, 0–1; a hybrid fund's stock portion scaled to 100%).
  * One entry per fund — its folios and both its plans combined, under the scheme's plan-neutral name — largest by value.
  * → { funds: [{ n, name, isin, weightPct, category }],
  *     closest: every fund's closest overlap, one row per pair (two funds that are each other's closest share a row),
@@ -259,7 +267,7 @@ function overlapModel(rows, fundHoldings) {
 }
 
 /** "high" (≥ OVERLAP_HIGH), "moderate" (OVERLAP_LOW to OVERLAP_HIGH) or "low" (< OVERLAP_LOW). */
-export function overlapBand(v) {
+function overlapBand(v) {
   return v >= OVERLAP_HIGH ? "high" : v >= OVERLAP_LOW ? "moderate" : "low";
 }
 

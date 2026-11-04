@@ -20,11 +20,10 @@
 import * as pdfjs from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
 import {
   analyzeCasPdf, probePdf, allocatePortfolio, buildDetailedReport, buildFundData, buildSnapshot, CAS_ERROR, fundInfo, holdingGain, summarizePortfolio, summarizeRecommendations,
-  suggestVerdicts, autoRecommend, buildReportProfile, revalueAtLatestNav, returnNotes, buildAllocation, withAllocation,
+  autoRecommend, buildReportProfile, revalueAtLatestNav, returnNotes, buildAllocation, withAllocation,
 } from "../../calculation-engine/index.js";
 import { loadBenchmarkHistories, loadFundHoldings, loadNavHistories, loadPeerStats, loadValuationData } from "../shared/market-data.js";
 import { searchSchemes } from "../shared/scheme-search.js";
-import { RECOMMENDATION_RULES } from "./recommendation-rules.js";
 import { ChoiceDialog } from "../../design-system/components/choice-dialog.js";
 import { AlertDialog } from "../../design-system/components/alert-dialog.js";
 import { statementProblems } from "./copy.js";
@@ -41,10 +40,31 @@ import { clearSavedClientData, openClientStore } from "./client-store.js";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
 
+/** isin → "Parag Parikh Flexi Cap Fund - Direct Plan - Growth" from the AMFI list, or null (no list / not listed). */
+function amfiNameByIsin(market) {
+  const map = market?.schemeMap;
+  if (!map) return null;
+  return (isin) => {
+    const s = map.byIsin(isin);
+    if (!s) return null;
+    if (s.plan === "ETF") return s.schemeName;
+    return `${s.schemeName} - ${s.plan} Plan${s.matchedOn === "isin" ? " - Growth" : ""}`;
+  };
+}
+
 const MARKET_INDEX = "OB56";   // NIFTY 500 (PulseDB code) — the portfolio's benchmark when the funds' own ones cover < 80%
 const STEPS = ["Upload", "Portfolio review", "Recommendation", "Recommended portfolio", "Final review"];
 
-export const REPORT = Object.freeze({ SNAPSHOT: "snapshot", DETAILED: "detailed" });
+const REPORT = Object.freeze({ SNAPSHOT: "snapshot", DETAILED: "detailed" });
+
+/** Offers the portfolio under review (a read-only getter, or null) to the research assistant, if it is loaded. */
+const portfolioForReview = (getter) => window.dispatchEvent(new CustomEvent("prosperr:portfolio-review", { detail: getter }));
+/** What the assistant may read at a step (1–4, or "snapshot"): read live on every question, so the advisor's changes show. */
+const reviewOf = (session, step) => () => ({
+  step, portfolio: session.portfolio, fundData: session.fundData ?? null, profile: session.profile ?? null,
+  suggestions: session.store.state.suggestions ?? {}, flags: session.store.state.autoLogic?.flags ?? [],
+  verdicts: session.store.state.verdicts ?? {}, asOf: session.store.state.autoLogic?.asOf ?? null,
+});
 
 const REPORT_OPTIONS = [
   {
@@ -92,7 +112,7 @@ export function mountPortfolioAnalyzer(container) {
   let analyzing = false;
 
   // ---------- derived state (engine) ----------
-  const recommendationOf = () => summarizeRecommendations(session.portfolio, session.store.state.verdicts);
+  const recommendationOf = () => summarizeRecommendations(session.portfolio, session.store.state.verdicts, session.store.state.suggestions ?? {});
   const allocationOf = () => allocatePortfolio({ amount: session.store.state.recommended.amount, rows: session.store.state.recommended.rows });
   const portfolioSkipped = () => Boolean(session.store.state.recommended.skipped);
 
@@ -111,6 +131,7 @@ export function mountPortfolioAnalyzer(container) {
   // ---------- step 0: upload ----------
   function showUpload() {
     session = null;
+    portfolioForReview(null);
     current = 0;
     snapshotScreen = null;
     const screen = createUploadScreen({
@@ -139,7 +160,10 @@ export function mountPortfolioAnalyzer(container) {
     screen.setStatus("Reading the statement…", "info");
     let portfolio;
     try {
-      portfolio = await analyzeCasPdf({ data: await file.arrayBuffer(), password, fileName: file.name, pdfjs });
+      // The AMFI list names a holding whose ISIN was read but whose scheme name the statement layout hid (never guessed:
+      // exact ISIN only). Without the list the statement is read as before.
+      const market = await loadValuationData().catch(() => null);
+      portfolio = await analyzeCasPdf({ data: await file.arrayBuffer(), password, fileName: file.name, pdfjs, nameByIsin: amfiNameByIsin(market) });
     } catch (error) {
       handleError(screen, error);
       screen.setBusy(false);
@@ -309,6 +333,7 @@ export function mountPortfolioAnalyzer(container) {
         ? buildDetailedReport({ portfolio, fundData, fundHoldings: fundData.autoInputs.fundHoldings }).overlap : null,
     });
     view.replaceChildren(reportSwitch("snapshot"), snapshotScreen.element, actionBar.element);
+    portfolioForReview(reviewOf(session, "snapshot"));
     actionBar.update({
       backLabel: "Upload another statement", onBack: showUpload,
       nextLabel: "Download one-pager (PDF)", nextIcon: "download", onNext: () => snapshotScreen.download(),
@@ -357,8 +382,8 @@ export function mountPortfolioAnalyzer(container) {
    * any fund. A REVIEW fund is not pre-selected. Without peer statistics nothing is pre-selected by the logic.
    */
   function applySuggestedVerdicts({ portfolio, fundData, store }) {
-    const auto = fundData?.autoInputs ? autoRecommend({ portfolio, ...fundData.autoInputs }) : null;
-    const suggestions = auto?.suggestions ?? suggestVerdicts({ portfolio, fundData, rules: RECOMMENDATION_RULES });
+    const auto = fundData?.autoInputs ? autoRecommend({ portfolio, ...fundData.autoInputs, profile: buildReportProfile(portfolio, fundData) }) : null;
+    const suggestions = auto?.suggestions ?? {};
     store.state.suggestions = suggestions;
     store.state.autoLogic = auto ? { version: auto.version, asOf: auto.asOf, flags: auto.flags } : null;
     for (const [key, suggestion] of Object.entries(suggestions)) {
@@ -373,12 +398,14 @@ export function mountPortfolioAnalyzer(container) {
 
     const { portfolio, summary, store } = session;
     const onChange = () => updateChrome();
+    // The research assistant, when present, reads this portfolio and the engine's calls (read only; it changes nothing).
+    portfolioForReview(reviewOf(session, current));
     let screen;
 
     if (current === 1) {
       screen = createReviewScreen({ portfolio, summary, holdingGain, store, onChange, fundData: session.fundData });
     } else if (current === 2) {
-      screen = createRecommendationScreen({ portfolio, fundData: session.fundData, store, holdingGain, summarize: (verdicts) => summarizeRecommendations(portfolio, verdicts), onChange });
+      screen = createRecommendationScreen({ portfolio, fundData: session.fundData, store, holdingGain, summarize: (verdicts) => summarizeRecommendations(portfolio, verdicts, store.state.suggestions ?? {}), onChange });
     } else if (current === 3) {
       screen = createBuilderScreen({ portfolio, summary, store, recommendation: recommendationOf(), allocate: allocatePortfolio, onChange, searchFunds });
     } else {

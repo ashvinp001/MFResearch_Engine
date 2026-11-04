@@ -1,7 +1,7 @@
 /**
  * Step 3 — Set the Prosperr Recommendation (Invest / Hold / Sell per fund).
  *
- * Input:  { portfolio, fundData (Phase 2, may be null), store, summarize(verdicts) → recommendation summary,
+ * Input:  { portfolio, fundData (may be null), store, summarize(verdicts) → recommendation summary,
  *           holdingGain(holding) → { gain, gainPct } | null, onChange() }
  * Output: DOM element. Verdicts are kept for this session as the advisor clicks.
  * Funds arrive pre-selected by the Prosperr logic (Recommendation_Logic.md, engine auto-recommendation.js)
@@ -72,6 +72,10 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
         ruleTag.className = chosen ? "rec-rule is-changed" : "rec-rule is-review";
         return ruleTag.replaceChildren(Icon(chosen ? "user" : "alert", { size: 12 }),
           chosen ? `Chosen by you · logic: review — ${suggestion.reason}` : `Review · ${suggestion.reason}`);
+      }
+      if (chosen === suggestion.verdict && suggestion.trim) {
+        ruleTag.className = "rec-rule is-auto";
+        return ruleTag.replaceChildren(Icon("sparkle", { size: 12 }), `Partial sale · ${suggestion.trim.fromPct.toFixed(1)}% → ${suggestion.trim.toPct.toFixed(1)}% of the portfolio, ${formatInr(suggestion.trim.amount, { whole: true })}`);
       }
       if (chosen === suggestion.verdict) {
         ruleTag.className = "rec-rule is-auto";
@@ -234,7 +238,7 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
 }
 
 // ---------- "Why this recommendation?" popup ----------
-// Each measure of the logic (auto-recommendation.js pillars) in plain words: name, what it means.
+// Each measure of the logic (fund-grading.js pillars) in plain words: name, what it means.
 const MEASURES = {
   R: { name: "Returns vs similar funds", meaning: "Its 3- and 5-year returns compared with the middle (median) fund of the same category." },
   B: { name: "Returns vs its benchmark index", meaning: "Whether it has beaten the market index it is meant to beat." },
@@ -278,6 +282,8 @@ function openExplain(fundName, s) {
   const [why, onItsOwn = null] = plain(s.reason).replace(/^Portfolio fit — /, "").split(/\s*On its own:\s*/);
   explainBody.replaceChildren(...[
     h("section", { class: "rec-explain-short" }, h("h3", {}, s.stage === "portfolio" ? "Why — for this portfolio" : "In short"), h("p", {}, sentence(why))),
+    actionSection(s),
+    compareSection(s),
     onItsOwn ? h("section", {}, h("h3", {}, "The fund on its own"), h("p", { class: "rec-explain-own" }, sentence(onItsOwn))) : null,
     measures.length
       ? h("section", {}, h("h3", {}, "How the fund was judged"),
@@ -295,6 +301,29 @@ function openExplain(fundName, s) {
       + "The suggestion is a starting point — you can change any fund.")].filter(Boolean));
   explainDialog.showModal();
   explainBody.scrollTop = 0;
+}
+
+/** What to do: the part being sold and where the money goes. */
+function actionSection(s) {
+  if (s.status !== "sell") return null;
+  const facts = s.trim
+    ? [["Current share", `${s.trim.fromPct.toFixed(1)}%`], ["New share", `${s.trim.toPct.toFixed(1)}%`], ["Amount to sell", formatInr(s.trim.amount, { whole: true })]]
+    : [["Current share", `${s.fundWeightPct.toFixed(1)}%`], ["New share", "Full exit"]];
+  return h("section", {}, h("h3", {}, "What to do"),
+    h("div", { class: "rec-explain-action" }, facts.map(([label, value]) => h("div", {}, h("span", {}, label), h("strong", { class: "ds-num" }, value)))),
+    s.move ? h("p", { class: "rec-explain-own" }, `Move the money to ${s.move}.`) : null);
+}
+
+/** Why the other fund stays: the two side by side, the better figure marked. */
+function compareSection(s) {
+  if (!s.compare?.rows.length) return null;
+  return h("section", {}, h("h3", {}, "Why the other fund is preferred"),
+    h("table", { class: "rec-explain-compare" },
+      h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Measure"), h("th", { scope: "col" }, "This fund"), h("th", { scope: "col" }, s.compare.otherName))),
+      h("tbody", {}, s.compare.rows.map((row) => h("tr", {},
+        h("th", { scope: "row" }, plain(row.label)),
+        h("td", { class: row.otherBetter ? "" : "is-better" }, row.fund),
+        h("td", { class: row.otherBetter ? "is-better" : "" }, row.other))))));
 }
 
 function summaryCard(recommendation) {

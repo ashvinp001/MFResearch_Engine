@@ -14,21 +14,26 @@ import { ROUTES } from "../shared/site-config.js";
 import { loadValuationData } from "../shared/market-data.js";
 import { ASSET_CLASSES, EQUITY_CATEGORIES, SHOW_CATEGORY_PAGES } from "./fund-research/research-config.js";
 import { indexStrip } from "./fund-research/index-strip.js";
+import { liveBand } from "../shared/live-band.js";
 import { categoryView, prefetchCategory } from "./fund-research/category-view.js";
 
-export const EQUITY_ROUTE = `${ROUTES.FUND_RESEARCH}/equity`;
+const EQUITY_ROUTE = `${ROUTES.FUND_RESEARCH}/equity`;
 
 export function renderFundResearchPage(view, slug = null) {
   const open = SHOW_CATEGORY_PAGES;   // inner pages switched off → every address shows the asset classes
   const category = open && slug ? EQUITY_CATEGORIES.find((c) => c.slug === slug && c.ready) : null;
   const level = category ? "category" : open && slug === "equity" ? "equity" : "home";
   // The hero band introduces Fund Research on its home page only; the inner pages open straight on their content.
+  const live = level === "home" ? liveBand() : null;
   view.replaceChildren(h("main", { class: "frx" },
-    level === "home" ? h("section", { class: "site-band frx-band" },
-      h("div", { class: "site-band-inner" },
+    live ? h("section", { class: "site-band frx-band" },
+      live.layer,
+      h("div", { class: "site-band-inner live-band-row" }, h("div", {},
         h("div", { class: "ds-eyebrow" }, "Fund Research"),
         h("h1", {}, "Explore the top mutual funds to invest"),
-        h("p", { class: "frx-band-text" }, "Compare every scheme within its SEBI category — trailing, monthly and calendar-year returns against the benchmark and the category average, computed from daily AMFI NAVs."))) : null,
+        h("p", { class: "frx-band-text" }, "Compare every scheme within its SEBI category — trailing, monthly and calendar-year returns against the benchmark and the category average, computed from daily AMFI NAVs.")),
+        live.pulse)) : null,
+    live?.ticker,
     h("div", { class: `home-container frx-body${level === "home" ? " is-home" : ""}` },
       level === "home" ? null : indexStrip(),   // Market Pulse sits with the category boxes and fund tables, not on the asset-class page
       level === "category" ? categoryView(category) : level === "equity" ? equityCategories() : assetClasses())));

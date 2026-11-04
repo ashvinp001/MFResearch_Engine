@@ -5,8 +5,7 @@
  *  DonutSvg({ items: [{ value, color }], size, thickness, gap, centerTop, centerBottom })
  *  GaugeSvg({ items: [{ value, color }], width, thickness, gap, centerTop, centerBottom })   half-donut gauge
  *  GroupedBars({ groups: [{ label, values: [number|null, …] }], series: [{ name, color, labelColor? }], height, slotWidth?, fixedSize? })
- *  StackedBar({ items: [{ label, value, color }] })     100% bar with labels
- *  ChartEmpty({ title, note })                         placeholder until data is connected
+ *  ChartEmpty({ title, note })                         placeholder when a chart has no data
  */
 
 import { h } from "./dom.js";
@@ -103,16 +102,7 @@ export function GroupedBars({ groups, series, height = 150, barWidth = 26, slotW
     children);
 }
 
-export function StackedBar({ items, ariaLabel }) {
-  const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
-  return h("div", { class: "ig-stacked", role: "img", "aria-label": ariaLabel ?? "Stacked bar" },
-    h("div", { class: "ig-stacked-bar" }, items.map((item) =>
-      h("span", { style: { width: `${(item.value / total) * 100}%`, background: item.color }, title: `${item.label}: ${item.value.toFixed(1)}%` }))),
-    h("div", { class: "ig-stacked-legend" }, items.map((item) =>
-      h("span", {}, h("i", { style: { background: item.color } }), `${item.label} `, h("strong", {}, `${item.value.toFixed(1)}%`)))));
-}
-
-export function ChartEmpty({ title = "Data not yet connected", note = "This section fills in automatically once fund and NAV data is connected." } = {}) {
+export function ChartEmpty({ title, note }) {
   return h("div", { class: "ig-empty" },
     h("span", { class: "ig-empty-icon" }, Icon("pie", { size: 22 })),
     h("strong", {}, title),

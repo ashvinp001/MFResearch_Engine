@@ -14,10 +14,10 @@ const MONTHS = {
 };
 
 /** Matches a printed number token: 1,00,000.00 | (1,234.5) | -12.3 | 0.000 */
-export const NUMBER_TOKEN_RE = /^\(?-?(?:₹|INR|Rs\.?)?\s*-?\d[\d,]*(?:\.\d+)?\)?$/i;
+const NUMBER_TOKEN_RE = /^\(?-?(?:₹|INR|Rs\.?)?\s*-?\d[\d,]*(?:\.\d+)?\)?$/i;
 
 /** Date token formats seen across CAS statements. */
-export const DATE_TOKEN_RE = /\b(\d{1,2})[-/ ]([A-Za-z]{3}|\d{1,2})[-/ ](\d{4})\b/;
+const DATE_TOKEN_RE = /\b(\d{1,2})[-/ ]([A-Za-z]{3}|\d{1,2})[-/ ](\d{4})\b/;
 
 function cleanNumberText(raw) {
   return String(raw).replace(/₹|INR|Rs\.?/gi, "").replace(/\s+/g, "").trim();

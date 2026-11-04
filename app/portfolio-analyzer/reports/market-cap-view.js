@@ -18,7 +18,7 @@ const CAPS = [
 ];
 
 /** The portfolio's market-cap tilt, from its own shares. */
-export function marketCapTilt({ large, mid, small }) {
+function marketCapTilt({ large, mid, small }) {
   if (large >= 60) return "Large-cap led";
   if (mid + small >= 50) return "Mid & small-cap tilt";
   return "Balanced mix";

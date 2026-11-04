@@ -25,9 +25,10 @@
 import { SCORECARD } from "../config.js";
 import { anchorNav, daysBetween, navOn, periodStart, trailingReturn } from "../analytics/returns.js";
 import { lastCompletedMonthEnd, monthEnds } from "../analytics/risk.js";
+import { isNum, sampleStd } from "../analytics/stats.js";
 import { percentiles, quartileOf } from "./fund-scorecard.js";
 
-export const INDEX_PILLARS = Object.freeze([
+const INDEX_PILLARS = Object.freeze([
   { key: "trackingDiff", label: "Tracking difference", required: true, measures: [
     { key: "td1y", label: "Tracking difference (1Y)", better: "higher", unit: "pct" },
     { key: "td3y", label: "Tracking difference (3Y, p.a.)", better: "higher", unit: "pct" }] },
@@ -40,12 +41,6 @@ export const INDEX_PILLARS = Object.freeze([
     { key: "aum", label: "AUM", better: "higher", unit: "cr" }] },
 ]);
 
-const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-function sampleStd(xs) {
-  if (xs.length < 2) return null;
-  const m = xs.reduce((s, x) => s + x, 0) / xs.length;
-  return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1));
-}
 
 /** Tracking difference for a period: fund return − index return, both at the fund's anchor date. */
 function trackingDiff(series, index, anchor, period) {

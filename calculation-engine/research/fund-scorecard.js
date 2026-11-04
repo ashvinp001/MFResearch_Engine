@@ -11,6 +11,10 @@
  *   notRated: [{ code, name, reason }],
  *   categoryReason: string | null    (set when fewer than minPeers funds qualify: nobody is ranked)
  * }
+ * quarterEnds(asOf, count) → the last `count` calendar quarter ends before asOf, oldest first.
+ * quarterlyQuartiles({ score, code, asOf, count }) → one fund's rank and quartile at each of those quarter ends.
+ * normalizedComparison(series, benchmark, from, to) → a fund and its index on common dates, both starting at 100.
+ * rebasedOn(series, dates) → another fund on those dates, starting at 100 (its latest NAV carried over a missing date).
  * backtestCategory({ funds, benchmark, asOf, settings, config }) → model check: rate as of `backtestYears` ago (AUM
  *   unknown then: the AUM condition and the Quality pillar are left out), then each quartile's return since.
  *
@@ -45,6 +49,7 @@
 import { SCORECARD } from "../config.js";
 import { anchorNav, daysBetween, navOn, periodStart, returnBetween, trailingReturn } from "../analytics/returns.js";
 import { lastCompletedMonthEnd, monthEnds, riskMetrics } from "../analytics/risk.js";
+import { isNum, mean, sampleStd } from "../analytics/stats.js";
 
 export const PILLARS = Object.freeze([
   { key: "returns", label: "Returns", measures: [
@@ -75,13 +80,6 @@ export const PILLARS = Object.freeze([
     { key: "aum", label: "AUM", better: "higher", unit: "cr" }] },
 ]);
 
-const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-const mean = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
-function sampleStd(xs) {
-  if (xs.length < 2) return null;
-  const m = mean(xs);
-  return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1));
-}
 
 /** E9 quartile (owner's ROUNDUP formula). */
 export function quartileOf(rank, n) {
@@ -174,7 +172,7 @@ function annualReturn(series, year, anchor) {
 
 /** Every per-fund measure that does not need the other funds (consistency vs the median is added by scoreCategory). */
 /** Risk window in years for a minimum history: 2 only when 2-year-old funds are allowed, else the E12 standard 3. */
-export function windowOf(minHistoryYears) {
+function windowOf(minHistoryYears) {
   return minHistoryYears < 3 ? 2 : 3;
 }
 
@@ -370,6 +368,50 @@ export function scoreCategory({ funds, benchmark = null, asOf, settings = null, 
       categoryReason: `Only ${scored.length} funds can be scored — at least ${conditions.minPeers} are needed to rank a category.` };
   }
   return { ...base, rated: scored, notRated, categoryReason: null };
+}
+
+export function quarterEnds(asOf, count = 4) {
+  const [year, month] = asOf.split("-").map(Number);
+  const quarter = Math.floor((month - 1) / 3);   // the quarter asOf is in: 0 = Jan–Mar
+  const ends = [];
+  for (let k = 1; ends.length < count; k++) {
+    const q = year * 4 + quarter - k, y = Math.floor(q / 4), m = (q % 4) * 3 + 3;
+    ends.unshift(new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10));
+  }
+  return ends;
+}
+
+/**
+ * One fund across past quarters. score(date) → the category scored as of that date (the caller's scoreCategory call, so
+ * it keeps its settings) → [{ date, rated, rank, quartile, score }]; rank and quartile are null when not rated then.
+ */
+export function quarterlyQuartiles({ score, code, asOf, count = 4 }) {
+  return quarterEnds(asOf, count).map((date) => {
+    const card = score(date);
+    const row = card.rated.find((r) => r.code === code);
+    return { date, rated: card.rated.length, rank: row?.rank ?? null, quartile: row?.quartile ?? null, score: row?.score ?? null };
+  });
+}
+
+/**
+ * A fund and its index on the dates both have, from..to, each rebased to 100 at the first common date. At most
+ * maxPoints points (the last one always kept) → { dates, fund, benchmark } | null with fewer than two common dates.
+ */
+export function normalizedComparison(series, benchmark, from, to, maxPoints = 260) {
+  const dates = series.dates.filter((d) => d >= from && d <= to && benchmark.index.has(d));
+  if (dates.length < 2) return null;
+  const step = Math.max(1, Math.ceil(dates.length / maxPoints));
+  const kept = dates.filter((_, i) => (dates.length - 1 - i) % step === 0);
+  if (kept[0] !== dates[0]) kept.unshift(dates[0]);
+  const rebase = (s) => { const base = s.navs[s.index.get(dates[0])]; return kept.map((d) => (s.navs[s.index.get(d)] / base) * 100); };
+  return { dates: kept, fund: rebase(series), benchmark: rebase(benchmark) };
+}
+
+/** null when the fund has no NAV on or before the first date: it did not exist yet, so it cannot start at 100. */
+export function rebasedOn(series, dates) {
+  const at = (date) => navOn(series, date, "previous")?.nav ?? null;
+  const base = at(dates[0]);
+  return base === null ? null : dates.map((d) => (at(d) / base) * 100);
 }
 
 /**

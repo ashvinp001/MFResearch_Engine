@@ -3,7 +3,7 @@
  *
  * Input:  a parser's NormalizedPortfolio draft.
  * Output: the same portfolio with whitespace trimmed, holding status derived
- *         from the printed closing units, investor PANs collected, and any
+ *         from the printed closing units and value (isNotHeld), investor PANs collected, and any
  *         title printed before the investor name split into `investor.title`.
  * No arithmetic on printed values and no reordering: rows stay in printed order.
  * The title is taken ONLY when the statement prints one — never inferred.
@@ -17,7 +17,7 @@ export function normalizePortfolio(portfolio) {
     holding.schemeName = tidy(holding.schemeName);
     holding.amc = tidy(holding.amc);
     holding.folio = tidy(holding.folio);
-    holding.status = holding.units === 0 ? "redeemed" : "active";
+    holding.status = isNotHeld(holding) ? "redeemed" : "active";
   }
 
   const pans = [portfolio.investor.pan, ...portfolio.holdings.map((holding) => holding.pan)].filter(Boolean);
@@ -29,6 +29,20 @@ export function normalizePortfolio(portfolio) {
   if (title) portfolio.investor.name = portfolio.investor.name.slice(title[0].length);
 
   return portfolio;
+}
+
+/** Below this many units a balance is a leftover fraction, not a holding (owner's rule: 0-unit funds stay out of reports). */
+const DUST_UNITS = 0.001;
+
+/**
+ * A fund the client no longer holds (owner's rule — never in any report, overlap or recommendation): closing units
+ * printed as 0, a leftover below DUST_UNITS, or a value printed as 0 with no meaningful units. A fund whose units and
+ * value were both not read is NOT treated as redeemed — it stays in and validation flags it.
+ */
+export function isNotHeld(holding) {
+  const units = holding.units, value = holding.marketValue;
+  if (units !== null && units !== undefined && Math.abs(units) < DUST_UNITS) return true;
+  return value === 0 && (units === null || units === undefined || Math.abs(units) < DUST_UNITS);
 }
 
 function tidy(text) {

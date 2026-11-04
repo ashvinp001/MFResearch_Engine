@@ -293,7 +293,14 @@ integrity    { status: ok | needs_review, checks[] { name, passed, detail }, war
 5. Printed totals = the "Total" row of each MUTUAL-FUND table segment (continuing across pages), summed in paise — never the statement's grand total (it includes equities). A segment mixing MF and non-MF rows cannot give an MF subtotal → `null` + warning.
 6. `navDate` = the statement's "as on" date.
 
-**E. Normalize (`cas/normalize.js`).** Trims whitespace, keeps printed order, no arithmetic. `status = redeemed` when printed closing units = 0, else `active`. Collects every PAN into `investor.pans`. A title printed before the name (MR, MRS, MS, MISS, DR, SHRI, SMT, KUMARI, KUM) is split into `investor.title`; none is inferred.
+**E. Normalize (`cas/normalize.js`).** Trims whitespace, keeps printed order, no arithmetic. `status = redeemed` (not held — owner's rule: never in any report, overlap, recommendation or figure) when the printed closing units are 0 or a leftover below 0.001, or the value is printed as 0 with no meaningful units (`isNotHeld`); else `active`. A fund whose units and value were both not read stays `active` and is flagged — never silently dropped. Collects every PAN into `investor.pans`. A title printed before the name (MR, MRS, MS, MISS, DR, SHRI, SMT, KUMARI, KUM) is split into `investor.title`; none is inferred.
+
+**F. Scheme name from our universe by ISIN (`parseCasDocument(doc, fileName, { nameByIsin })`, 30-Oct-2026, owner's rule).**
+After normalising and BEFORE validation: a holding whose ISIN was read (valid check digit) but whose scheme name the
+layout hid takes the official name of that exact ISIN from the AMFI scheme lists ("Parag Parikh Flexi Cap Fund - Direct
+Plan - Growth"), marked `nameSource = "amfi"`. Never by a partial match or a name; a name read from the statement is
+never replaced; without the lists (offline) the statement is read as before and the row is flagged `MISSING_REQUIRED`.
+The upload flow passes the lookup (`workflow.js amfiNameByIsin`).
 
 **Investor name (`cas/investor-name.js`)**, strategies in order, accepted only if it reads like a person's name: labelled field ("Name :", "Investor Name", "Sole / First Holder") → left-column name near the email line → first name-like cell → holder line under the first "Folio No".
 
@@ -303,7 +310,7 @@ integrity    { status: ok | needs_review, checks[] { name, passed, detail }, war
 
 | Flag | Rule |
 |---|---|
-| `MISSING_REQUIRED` | ISIN or scheme name not read |
+| `MISSING_REQUIRED` | ISIN not read, or scheme name not read and not in the AMFI lists for that ISIN (E15.2 F) |
 | `ISIN_INVALID` | fails the ISIN check digit (E15.4) |
 | `NAV_WITHOUT_DATE` | NAV printed without a NAV date |
 | `VALUE_WITHOUT_UNITS` | value printed but no unit balance |
@@ -428,7 +435,7 @@ are checked IN ORDER:
 5. ELSS (ELSS, tax saver/savings, long term equity, tax plan/advantage) → equity.
 6. Equity: index/ETF/Nifty/Sensex/BeES → large & mid cap → small cap → mid cap → large cap / bluechip / top 100 / focused / flexi / multi cap / value / contra / dividend yield → sectoral/thematic keywords.
 
-**E15.5.7 Rule-based verdict suggestions (`recommendation-rules.js`) — framework, inactive until rules are supplied.** Rules `{ id, verdict, reason, when: [ { metric, op, value } ] }` are checked top to bottom; the first rule whose conditions ALL hold pre-selects the fund's verdict (the advisor can change it). Metrics: `absoluteReturnPct, gainAmount, currentValue, investedValue, weightPct, return1y/3y/5y, excess1y/3y/5y, assetClass, category`. Operators: `< <= > >= = != in, not in`. A condition on unavailable data is FALSE. The rule set (`app/portfolio-analyzer/recommendation-rules.js`) is currently empty.
+**E15.5.7 Verdict suggestions.** Invest / Hold / Sell is pre-selected by `autoRecommend` (`portfolio-analyzer/auto-recommendation.js`, Recommendation_Logic.md). The advisor can change any fund; without peer statistics nothing is pre-selected.
 
 ### E15.5.8 Current value at the latest NAV (`portfolio-analyzer/revalue.js`)
 
@@ -626,9 +633,9 @@ groups (`tests/peer-stats-check.html`: 1,952 figures, 0 mismatches).
 - Verified by a unit test: funds that move exactly with their index give benchmark = portfolio, Beta 1, Alpha 0;
   below 80% coverage nothing is published.
 
-### E15.6 Market-data interfaces (pending data source)
+### E15.6 Market data
 
-NAV history is connected (E15.5.8, E15.5.9; `analytics/returns.js`, `analytics/risk.js` implement E1/E2/E12). `market/fund-data-provider.js` (`getFundData`) and `market/nav-provider.js` remain interfaces for the PulseDB-backed data and return `null` / "not implemented" until connected; every consumer renders `null` as "—". The formulas used when they are wired are specified in this file by the owner (E1–E5 and E12 hold the platform's existing return and risk methodology).
+NAV history is connected (E15.5.8, E15.5.9; `analytics/returns.js`, `analytics/risk.js` implement E1/E2/E12). `buildFundData` (`portfolio-analyzer/portfolio-performance.js`) produces the fund and portfolio figures; a figure that is not available renders as "—".
 
 ### E15.7 Tunables (`calculation-engine/config.js`)
 

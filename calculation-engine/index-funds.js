@@ -56,7 +56,7 @@ const SECTOR = /\b(bank|banking|financials?|fin\s*serv|ex[\s-]*banks?|clean\s+en
 const BROAD = /nifty\s*50\b|sensex|nifty\s*next\s*50|nifty\s*100\b|bse\s*100\b|nifty\s*200\b|bse\s*200\b|nifty\s*500\b|bse\s*500\b|total\s*market|midcap\s*150|smallcap\s*250|large\s*mid\s*cap\s*250|largemidcap\s*250|midsmallcap\s*400|midcap\s*50\b|smallcap\s*50\b|microcap\s*250|multicap\s*50\s*:\s*25\s*:\s*25|top\s*\d+\b|bse\s*1000|sensex\s+next/i;
 
 /** The tracked index's short name from a benchmark name: "NIFTY 50 Index" → "NIFTY 50". */
-export function indexShortName(benchmarkName) {
+function indexShortName(benchmarkName) {
   return benchmarkName ? String(benchmarkName).replace(/\s+index(\s+tri)?\s*$/i, "").replace(/\s+tri\s*$/i, "").trim() : null;
 }
 

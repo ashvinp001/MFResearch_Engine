@@ -16,10 +16,17 @@ Keys (see .env.example):
 from __future__ import annotations
 
 import os
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+IST = timezone(timedelta(hours=5, minutes=30))
 ENV_FILE = ROOT / ".env"
+
+def india_today() -> date:
+    """Today in India: NAV dates are Indian dates, whatever the machine's time zone."""
+    return datetime.now(IST).date()
+
 
 DEFAULTS = {
     "SUPABASE_BUCKET": "mf-data",

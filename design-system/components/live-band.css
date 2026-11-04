@@ -1,0 +1,36 @@
+/* Live header (app/shared/live-band.js): moving colour, still candles, moving lines, particles, update pulse, index ticker. */
+
+.site-band-inner.live-band-row { max-width: none; }   /* the heading follows the left edge when zoomed out, like the ticker */
+.live-band-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.live-band-end { display: grid; justify-items: end; gap: 10px; align-self: flex-start; }
+.live-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  background: linear-gradient(115deg, transparent, rgba(31, 138, 138, .3), rgba(43, 90, 167, .35), transparent); background-size: 400% 400%; animation: live-colour 14s ease-in-out infinite alternate; }
+@keyframes live-colour { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+.live-particle { position: absolute; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px rgba(174, 212, 149, .9); animation: live-rise linear infinite; }
+@keyframes live-rise { 0% { transform: translateY(40px); opacity: 0; } 15% { opacity: .9; } 85% { opacity: .7; } 100% { transform: translateY(-240px); opacity: 0; } }
+.live-chart { position: absolute; inset: 12% 0 4%; overflow: hidden; mask-image: linear-gradient(90deg, rgba(0, 0, 0, .3) 0%, rgba(0, 0, 0, .3) 34%, #000 52%); }
+.live-candles { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .34; }
+.live-wick { fill: none; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.live-wick.is-up { stroke: var(--lime); } .live-wick.is-down { stroke: #e59a90; }
+.live-candle-body.is-up { fill: var(--lime); } .live-candle-body.is-down { fill: #c9685c; }
+.live-line { position: absolute; left: 0; bottom: 0; width: 400%; height: 90%; animation: live-drift 80s linear infinite; }
+.live-line path { fill: none; stroke: var(--lime); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+.live-line.is-second { height: 72%; animation-duration: 110s; } .live-line.is-second path { stroke: #ffb3a8; }
+@keyframes live-drift { to { transform: translateX(-50%); } }
+.live-pulse { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; min-height: 20px; font-size: 13px; font-weight: 600; color: #fff; opacity: 0; }
+.live-pulse.is-ready, .live-chart, .live-ticker.is-ready > * { animation: live-fade .6s ease-out both; }
+.live-pulse.is-instant, .live-chart.is-instant, .live-ticker.is-instant > * { animation: none; opacity: 1; }
+@keyframes live-fade { from { opacity: 0; } to { opacity: 1; } }
+.live-pulse i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%; background: var(--navy); border: 2px solid #fff; animation: live-pulse 2s ease-out infinite; }
+@keyframes live-pulse { from { box-shadow: 0 0 0 0 rgba(255, 255, 255, .7); } to { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); } }
+.live-ticker { display: flex; align-items: center; min-height: 46px; color: #fff; background: #0c1f43; border-bottom: 3px solid var(--green); overflow: hidden; }
+.live-tick-date { flex: none; position: relative; z-index: 1; padding: 11px 16px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #dbe6f7; background: #0c1f43; box-shadow: 8px 0 12px #0c1f43; }
+.live-tick-window { flex: 1; min-width: 0; overflow: hidden; }
+.live-tick-run { display: flex; width: max-content; animation: live-drift 36s linear infinite; }
+.live-ticker:hover .live-tick-run { animation-play-state: paused; }
+.live-tick-set { display: flex; }
+.live-tick-item { display: inline-flex; gap: 10px; padding: 11px 24px; font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.live-tick-item .is-up { font-weight: 700; color: var(--lime); } .live-tick-item .is-down { font-weight: 700; color: #ffb3a8; }
+@media (prefers-reduced-motion: reduce) { .live-layer, .live-particle, .live-line, .live-pulse i, .live-pulse.is-ready, .live-chart, .live-ticker.is-ready > * { animation: none; }
+  .live-pulse.is-ready { opacity: 1; } .live-particle { opacity: .5; }
+  .live-tick-run { animation: none; } .live-tick-window { overflow-x: auto; } }

@@ -1,6 +1,6 @@
 """Fund holdings for the website (called by the local server for GET /api/fund-holdings?isins=…).
 
-Usage (by serve.ps1):  python data-pipeline/holdings_api.py INF879O01027 INF846K01EW2 …
+Usage (by the website server, server/routes/api.js):  python data-pipeline/holdings_api.py INF879O01027 INF846K01EW2 …
 Output (stdout, JSON): { "funds": { "<isin>": { "asOn": "YYYY-MM", "holdings": [{ name, isin, assetType, sector, marketCap,
                                     weight }], "unresolved": [...] } }, "missing": [isins without holdings] }
 That is the engine's holdings contract (MF_Calculation_Engine.md E15.5.12): rows classified by

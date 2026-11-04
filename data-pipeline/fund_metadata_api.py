@@ -1,6 +1,6 @@
 """Fund details for the website (called by the local server for GET /api/fund-metadata?codes=…).
 
-Usage (by serve.ps1):  python data-pipeline/fund_metadata_api.py 122639 100119 …
+Usage (by the website server, server/routes/api.js):  python data-pipeline/fund_metadata_api.py 122639 100119 …
 Output (stdout, JSON): { "generatedAt", "units", "funds": { "<code>": { aum, inception, manager, riskometer, exitLoad } },
                          "missing": [codes without details] }
 Reads stats/fund-metadata.json (written by fund_metadata.py after each daily update; reused locally for 5 minutes).

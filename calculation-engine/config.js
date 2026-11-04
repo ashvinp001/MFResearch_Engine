@@ -43,13 +43,14 @@ export const PORTFOLIO_ANALYTICS = Object.freeze({
 
 // Recommendation_Logic.md — automatic Invest / Hold / Sell pre-selection. Percent / percentage points.
 export const RECOMMENDATION = Object.freeze({
-  version: "1.4",
+  version: "2.0",
   highOverlapPct: 50,        // two active equity funds holding this share of the same stocks = largely the same exposure
   overlapMinMeasures: 4,     // the overlap comparison needs at least this many measures both funds have
   sectorLagPp: 2.0,          // a sector index this far a year behind NIFTY 500 on 3Y and 5Y (and behind on 1Y) = not performing
   sectorImplausiblePp: 40,   // a sector fund's own NAV this far from the market (pp a year) = a break in its history, not a result
   equityGapPp: 1.0,          // T: 3Y and 5Y both this far below the category median = persistent under-performance
   debtGapPp: 0.3,            // T for debt funds (spreads between debt funds are small)
+  duplicateGapPp: 0.5,       // a fund behind its category and its benchmark by this much gives way to a stronger fund of its category
   benchmarkGapPp: 1.0,       // B: 3Y and 5Y both this far behind the fund's own benchmark = clearly behind it
   passiveTrackingPp: 1.0,    // an index fund / ETF trailing its index by more than this a year (3Y) tracks poorly
   consistencyGood: 65,       // % of rolling 3Y windows at or above the category median
@@ -60,16 +61,32 @@ export const RECOMMENDATION = Object.freeze({
   creditUnknownMax: 10,      // more unrated (non-government) debt than this % → credit quality unknown
   creditEventDayPct: -1.0,   // a one-day fall worse than this in a short / medium debt fund → REVIEW
   investMaxWeightPct: 20,    // a STRONG fund already above this share of the portfolio → HOLD, not INVEST
+  oneYearShortTermMonths: [6, 3], // 1-year rule (young funds only): "decent in the short term" = at or above the category median over 6M or 3M
   investMin1yExcessPp: -5.0, // a STRONG fund trailing its category's 1Y median by more than this (a sharp fall) → HOLD
   staleDays: 7,              // peer statistics older than this vs the fund's NAV date → REVIEW
   elssLockYears: 3,
-  flags: Object.freeze({ amcPct: 40, thematicPct: 15, goldSilverPct: 15, overseasPct: 15 }),
+  flags: Object.freeze({ amcPct: 40, thematicPct: 15, goldSilverPct: 15, overseasPct: 30 }),
   // Portfolio fit (v1.4): the ideal fund count is the Diversification range for the portfolio's value.
   fit: Object.freeze({
     smallShareOfAverage: 0.25, // small holding = below this × the average fund share at the ideal maximum (100 / max)
-    passiveMaxFunds: 3,        // index funds / ETFs (not gold / silver) a portfolio needs at most…
+    passiveMaxFunds: 3,        // equity index funds / ETFs (not gold / silver / debt) a portfolio needs at most…
     passiveMaxFundsSmall: 2,   // …or this many when its ideal maximum is ≤ smallPortfolioIdealMax funds
     smallPortfolioIdealMax: 6,
+    debtMaxFunds: 2,           // debt + arbitrage funds a portfolio needs at most (owner: very few)…
+    debtMaxFundsSmall: 1,      // …or this many when its ideal maximum is ≤ 4 funds
+    trackingSamePp: 0.5,       // index funds whose tracking differs by less than this (pp a year) are equal; the larger holding is kept
+    passiveMaxPct: 20,         // equity index funds / ETFs together at most this share of the portfolio
+    bestShare: 0.6,            // two funds sharing a limit: the clearly better one's share (alike: equal)
+    clearLeadScore: 20,        // portfolio-score points that make one fund clearly better than another
+    passiveSuggestPct: 10,     // every index fund exited: this share suggested into one that tracks well
+    reviewSellMaxPct: 25,      // consolidation is staged: fund-count exits sell at most this share of the portfolio per review
+    minTrimPct: 1.0,           // a partial sale smaller than this share of the portfolio is not worth the transaction and tax
+    // Large / Mid / Small reference for the equity, by basket (capBasket: the lower of what risk and horizon allow).
+    capBaskets: Object.freeze([
+      Object.freeze({ label: "Conservative", large: 65, mid: 25, small: 10 }),
+      Object.freeze({ label: "Balanced", large: 50, mid: 30, small: 20 }),
+      Object.freeze({ label: "Growth", large: 35, mid: 35, small: 30 }),
+    ]),
   }),
 });
 

@@ -1,6 +1,6 @@
 """NAV history for the website (called by the local server for GET /api/nav-history?codes=…).
 
-Usage (by serve.ps1):  python data-pipeline/nav_api.py [--years=N] 122639 100119 …
+Usage (by the website server, server/routes/api.js):  python data-pipeline/nav_api.py [--years=N] 122639 100119 …
 Output (stdout, JSON): { "from": "YYYY-MM-DD", "series": { "<code>": { "dates": [...], "navs": ["90.354600", ...] } },
                          "missing": [codes with no stored history] }
 Only daily NAVs from YEARS_BACK years (plus a margin for the E1 lookups) are returned — enough for

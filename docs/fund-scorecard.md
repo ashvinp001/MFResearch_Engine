@@ -4,6 +4,16 @@ The Fund Scorecard is internal research and is never shown to clients. It rates 
 
 It sits on the top tab **Fund Scorecard** (`#/fund-scorecard`).
 
+## Live header
+
+The header has moving colour, still weekly NIFTY 50 candles built from stored daily closes with moving NIFTY 50 and NIFTY 500 lines over them, particles, an update pulse and an index ticker (`app/shared/live-band.js`, shared with Fund Research). All figures are stored closes and the stored NAV time, so they follow the daily job. They do not affect any rating, and motion stops for devices set to reduce motion.
+
+## Fund popup
+
+Clicking a top-three card opens `app/pages/fund-scorecard/fund-dialog.js`, one screen: relative performance against the fund's own benchmark rebased to 100 (6M, 1Y, 3Y, 5Y, All; a period longer than the fund's history is switched off), six key risk metrics with their percentiles, and the quartile trend over the last four quarter ends and today. The other two top-three funds can be added with the Compare with buttons: each then appears on the chart and in the quartile trend.
+
+Past quarters come from `quarterlyQuartiles`: the category is scored again as of each quarter end, the way the Model check does. AUM history is not stored, so active-fund quarters leave out the AUM condition and the Quality pillar, and may rank more funds than today's list. Index-fund quarters use today's AUM.
+
 ## How a fund is rated
 
 1. **Conditions.** These are the owner's settings. A fund that fails any one of them is listed as **Not rated**, with the reason. It is never scored and never recommended. A fund must meet all of these:
@@ -81,7 +91,7 @@ The owner edits the settings in a pop-up (`app/pages/fund-scorecard/settings-dia
 
 
 - **Who can change them.** Editing needs both of these:
-  - a request from the owner's PC (the one running `serve.ps1`); the server refuses every other computer
+  - a request from the owner's PC (the one running the website server); the server refuses every other computer
   - the **edit password**. The owner created it once on the page (Edit → Create password). It is **final**: the page has no way to change it, and the server refuses changes (`PASSWORD_FINAL` in `scorecard_settings.py`). It can also be set in a real console window with `python data-pipeline/scorecard_settings.py set-password`. Only a salted PBKDF2-SHA256 hash is stored, in `.env` as `SCORECARD_PASSWORD_HASH`. Edit asks for the password first, and the server checks it again on save. After a wrong password the server waits one second before answering. Until a password is set, nobody can edit.
 
   Every other visitor sees the settings read-only.

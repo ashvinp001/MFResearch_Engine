@@ -33,7 +33,7 @@
 import { PORTFOLIO_ANALYTICS } from "../config.js";
 import { toPaise } from "../cas/parse-values.js";
 
-export const WEIGHT_TOLERANCE = 2;   // percentage points
+const WEIGHT_TOLERANCE = 2;   // percentage points
 const GROUP = { equity: "equity", foreignEquity: "equity", debt: "debt", cash: "debt", gold: "goldSilver", silver: "goldSilver", reit: "other", other: "other" };
 const round2 = (x) => Math.round(x * 100) / 100;
 

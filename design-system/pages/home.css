@@ -1,4 +1,4 @@
-/* Home and Fund Research pages. Tokens only. */
+/* Home page. Tokens only. */
 
 .home-container { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--page-gutter); }
 
@@ -101,50 +101,10 @@
 .home-next-badge { padding: 4px 12px; border-radius: 999px; background: var(--surface-tint-blue); color: var(--color-info); font-size: 12px; font-weight: 700; }
 .home-next-arrow { color: var(--color-info); }
 
-/* ---------- Fund Research ---------- */
-.soon-inner { padding-top: 72px; padding-bottom: 88px; display: grid; justify-items: start; gap: var(--sp-4); }
-.soon-title { font-size: clamp(28px, 3.6vw, 42px); font-weight: 800; line-height: 1.08; margin: 0; }
-.soon-text { margin: 0; max-width: 720px; color: var(--on-dark-secondary); font-size: 16px; line-height: 1.6; }
-.soon .ds-btn { text-decoration: none; }
-
-.fr-explore {
-  padding: 56px 0 24px;
-  background:
-    radial-gradient(640px 420px at 6% 40%, var(--surface-tint-blue), transparent 70%),
-    radial-gradient(560px 380px at 96% 70%, var(--surface-tint-green), transparent 70%);
-}
-.fr-title { text-align: center; font-size: clamp(22px, 2.2vw, 28px); font-weight: 800; margin: 0 0 32px; }
-.fr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.fr-card {
-  position: relative; display: grid; align-content: start; gap: 18px;
-  padding: 36px 36px 30px; border-radius: var(--r-lg);
-  background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--accent);
-  box-shadow: var(--shadow-card);
-  transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
-}
-.fr-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-raised); }
-.fr-card-head { display: flex; align-items: center; gap: 16px; }
-.fr-card-icon {
-  width: 58px; height: 58px; flex: none; display: grid; place-content: center; border-radius: 50%;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--surface));
-}
-.fr-card-head h3 { padding-left: 14px; border-left: 2px solid var(--border); font-size: 18px; line-height: 1.9; }
-.fr-card p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
-.fr-card-soon {
-  justify-self: start; display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 10px; border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  color: var(--text-secondary); font-size: 12px; font-weight: 700;
-}
-.fr-card-soon .ds-icon { color: var(--accent); }
-
 /* ---------- Responsive ---------- */
 @media (max-width: 1080px) {
   .home-hero-inner { grid-template-columns: 1fr; padding-top: 48px; }
   .home-spotlight { grid-template-columns: 1fr; margin-top: 32px; }
-  .fr-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 680px) {
   .home-preview-card.list { margin-left: 0; }
@@ -152,6 +112,4 @@
   .home-report-art { height: 200px; }
   .home-next { grid-template-columns: auto 1fr; }
   .home-next-badge, .home-next-arrow { display: none; }
-  .fr-grid { grid-template-columns: 1fr; }
-  .fr-card { padding: 28px 24px; }
 }

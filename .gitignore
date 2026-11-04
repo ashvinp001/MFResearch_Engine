@@ -16,9 +16,6 @@ CLAUDE.md
 # Kept local, not pushed to GitHub (owner's decision)
 MF_Platform_Specification.md
 
-# Reference report PDFs — contain real client data, local only
-Portfolio Review & Recommandation Updated.pdf
-Sample Portfolio Review.pdf
 
 # Python bytecode
 __pycache__/
@@ -30,3 +27,7 @@ Thumbs.db
 
 # Claude Code local settings — kept local
 .claude/
+
+# Node.js
+node_modules/
+npm-debug.log*

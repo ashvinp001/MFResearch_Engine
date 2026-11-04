@@ -7,7 +7,7 @@
  * Reports (.ds-paper) always stay light; see design-system/tokens.css.
  */
 
-export const THEME_STORAGE_KEY = "prosperr-theme";
+const THEME_STORAGE_KEY = "prosperr-theme";
 const THEMES = new Set(["light", "dark"]);
 
 export function currentTheme() {

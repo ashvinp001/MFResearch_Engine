@@ -46,9 +46,9 @@ calculation-engine/
   errors.js                CasError + CAS_ERROR codes
   model/                   NormalizedPortfolio contract and factories
   cas/                     PDF → NormalizedPortfolio pipeline (see portfolio-analyzer.md)
-  identity/                ISIN check digit; ISIN → scheme map (Phase 2 interface)
-  market/                  NAV and fund-data providers (Phase 2 interfaces)
-  analytics/               Returns and risk (Phase 2 interfaces)
+  identity/                ISIN check digit; ISIN → scheme map
+  analytics/               Returns, risk and shared numeric helpers
+  research/                Fund Scorecard, Index Scorecard, returns table
   portfolio-analyzer/      Models for the Portfolio Analyzer: summary, recommendations,
                            allocation, one-pager and detailed-report models
 
@@ -64,11 +64,15 @@ design-system/
 app/
   main.js                  Hash router
   shell.js                 Mounts the site header + footer once
-  pages/                   Home and Fund Research (coming soon) pages
+  pages/                   Home, Fund Research and Fund Scorecard pages
   shared/                  Formatting, printing, site config (routes, nav, footer)
   portfolio-analyzer/      Workflow, in-memory client state, screen copy,
     screens/               Upload, review, recommendation, builder, final, one-pager
     reports/               Printable one-pager and detailed report (layout + wording)
+      detailed/            One file per Detailed Report section + shared page layout
+
+server/                    Node.js web server: website files, /api routes, team sign-in
+data-pipeline/             Python: NAVs, benchmarks, peer statistics, Supabase (see its README)
 ```
 
 ## Request flow
@@ -122,14 +126,3 @@ See [portfolio-analyzer.md](portfolio-analyzer.md) for each stage in detail.
 - **Configuration.** Tolerances and limits belong in `calculation-engine/config.js`, with a comment
   explaining each.
 
-## Phase 2 seams
-
-These interfaces exist with stable signatures but return `null`, or throw "not implemented", until a
-free data source is connected. The UI already renders `null` as "—".
-
-| Module | Will provide |
-|---|---|
-| `market/fund-data-provider.js` | Category, asset class, benchmark, returns, risk, sectors and market cap per fund |
-| `market/nav-provider.js` | NAV history per scheme |
-| `identity/scheme-map.js` | ISIN → AMFI scheme code, name, category, plan (from `data/schemes/`) |
-| `analytics/returns.js`, `analytics/risk.js` | Trailing returns, XIRR and risk ratios |

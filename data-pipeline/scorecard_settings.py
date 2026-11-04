@@ -3,7 +3,7 @@
 Usage:
     python data-pipeline/scorecard_settings.py set-password     # you, once, in a terminal: asks for the edit password twice
                                                                 # and stores only its salted hash in .env
-  by serve.ps1:
+  by the website server (server/routes/api.js):
     python data-pipeline/scorecard_settings.py get --can-edit=true|false   # stdout: { canEdit, passwordSet, settings }
     python data-pipeline/scorecard_settings.py verify   # stdin: { password } → { ok } | error
     python data-pipeline/scorecard_settings.py set      # stdin: { password, weights, conditions } → validated, saved, echoed

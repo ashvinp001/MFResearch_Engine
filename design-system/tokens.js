@@ -10,7 +10,7 @@ const v = (name) => `var(--${name})`;
 export const CHART_SEQUENCE = Object.freeze(["navy", "blue", "green", "steel", "lime", "grey"].map(v));
 
 /** Card accent rotation for neutral/structural cards (Project_Specification_TEMP.md §3.1). */
-export const ACCENT_CYCLE = Object.freeze(["navy", "blue", "green", "steel", "lime"].map(v));
+const ACCENT_CYCLE = Object.freeze(["navy", "blue", "green", "steel", "lime"].map(v));
 
 /** Semantic tones shared by Badge, Callout and KpiCard. */
 export const TONE = Object.freeze({

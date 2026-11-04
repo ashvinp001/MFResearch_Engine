@@ -186,7 +186,7 @@ export function createBuilderScreen({ portfolio, summary, store, recommendation,
          row.fundId.startsWith("h:") ? h("span", { class: "app-tag" }, "Client's fund") : null].filter(Boolean)
       : []));
     const picker = SearchSelect({
-      label: "Fund", placeholder: "Search all funds — type a fund name, e.g. parag flexi direct", value: row.name,
+      label: "Fund", placeholder: "Search all funds — a fund name (e.g. parag flexi direct) or its ISIN", value: row.name,
       search: async (query) => {
         const own = clientItems(query);
         if (!query) return own;

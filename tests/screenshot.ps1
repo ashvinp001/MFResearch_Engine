@@ -5,6 +5,10 @@ param([string]$Url, [string]$Out, [int]$Width = 1366, [int]$Wait = 6, [switch]$P
 
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 $port = 9444
+# A headless window left over from an earlier run would take the URL and keep its old page: close those first
+# (only this tool's own profile, never the user's Edge).
+Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -match 'edge-shot-profile' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 $start = Get-Date
 Start-Process -FilePath $edge -ArgumentList "--headless=new", "--disable-gpu", "--no-first-run", "--hide-scrollbars",
   "--user-data-dir=$env:TEMP\edge-shot-profile", "--remote-debugging-port=$port", "--window-size=$Width,900", $Url

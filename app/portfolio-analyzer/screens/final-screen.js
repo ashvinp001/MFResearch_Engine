@@ -21,7 +21,7 @@ import { renderDetailedReport } from "../reports/detailed-report.js";
 import { autoDetails, autoNote } from "../report-profile-notes.js";
 import { signedPct, signedWhole } from "../reports/snapshot-format.js";
 
-export const STEP = { REVIEW: 1, RECOMMENDATION: 2, BUILDER: 3 };
+const STEP = { REVIEW: 1, RECOMMENDATION: 2, BUILDER: 3 };
 
 export function createFinalScreen({ model, portfolio, recommendation, allocation, skipped = false, profile = null, store, onGoTo, onChange, notes = [] }) {
   // Report details come from the Prosperr logic (engine buildReportProfile) and are locked: nobody can change them.

@@ -40,3 +40,6 @@ function render() {
 
 window.addEventListener("hashchange", render);
 render();
+// The research assistant, when its files are present (they are kept out of the repository): it reads the data and the
+// engine's results and changes nothing. Without it the site runs exactly the same.
+import("./assistant/assistant.js").then((m) => m.mountAssistant()).catch((error) => console.debug("Research assistant not loaded:", error.message));

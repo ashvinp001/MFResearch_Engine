@@ -3,7 +3,7 @@
  * These fill the "Report details" automatically; the advisor can still change them.
  * The rules below are the Prosperr logic EXACTLY as specified (see docs/report-profile-logic.md).
  *
- * Input:  a validated portfolio and fundData (Phase 2, may be null).
+ * Input:  a validated portfolio and fundData (may be null).
  * Output: buildReportProfile → {
  *   diversification: { status, numFunds, portfolioValue, range: { min, max }, largestFund: { name, sharePct } },
  *   risk:    { label | null, equityPct | null, unclassified: [fundName], others: [{ name, sharePct, reason }], othersPct },

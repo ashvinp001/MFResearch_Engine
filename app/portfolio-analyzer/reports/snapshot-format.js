@@ -4,9 +4,8 @@
  *  weight "21.89" · split "35.0" · gain % "−0.19%".
  */
 
-import { DASH } from "../../shared/format.js";
+import { DASH, MONTHS } from "../../shared/format.js";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MINUS = "−";
 
 export function formatSnapshotDate(iso) {

@@ -30,7 +30,7 @@ Add a new stylesheet by importing it there, in its layer.
 | `tokens.css` / `tokens.js` | Palette, semantic colors, type scale, spacing, radius, shadows |
 | `typography.css` | Type roles |
 | `components/dom.js` | `h()` element builder |
-| `components/basics.js` | Logo, SectionHeader, KpiCard, Badge, Callout, Card |
+| `components/basics.js` | Logo, KpiCard, Badge, Callout, Card |
 | `components/data-table.js` | DataTable with group bands |
 | `components/charts.js`, `infographics.js` | Donut, bars, stacked bars (inline SVG/CSS, print-safe) |
 | `components/icons.js` | Inline SVG icon set |

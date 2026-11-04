@@ -33,7 +33,8 @@
  * @property {string|null} folio
  * @property {string|null} pan           PAN printed against this folio
  * @property {"CAMS"|"KFINTECH"|null} registrar
- * @property {"active"|"redeemed"} status redeemed = closing units printed as zero
+ * @property {"active"|"redeemed"} status redeemed = not held: closing units 0 or a leftover below 0.001, or value printed
+ *           as 0 with no meaningful units (cas/normalize.js isNotHeld) — never in a report
  * @property {number|null} openingUnits
  * @property {number|null} units         closing unit balance
  * @property {number|null} nav
@@ -44,8 +45,8 @@
  * @property {number|null} printedGain   unrealised profit/loss, if the statement prints it
  * @property {{openingUnits:string|null, units:string|null, nav:string|null, costValue:string|null, marketValue:string|null, averageCost:string|null, printedGain:string|null}} raw
  * @property {Transaction[]} transactions
- * @property {string|null} category      enriched in Phase 2
- * @property {string|null} assetClass    enriched in Phase 2
+ * @property {string|null} category      enriched from fund data
+ * @property {string|null} assetClass    enriched from fund data
  * @property {string[]} flags            validation flags for this row
  */
 

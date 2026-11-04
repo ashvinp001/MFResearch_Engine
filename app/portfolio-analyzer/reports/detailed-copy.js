@@ -134,8 +134,8 @@ export function observations(model) {
     if (row.verdict && !seen.has(id)) { seen.add(id); counts[row.verdict]++; }
   }
   const conclusion = counts.sell
-    ? [`Add to ${plural(counts.invest, "fund")}, hold ${counts.hold} and exit ${counts.sell}. The main lever now is `, { b: "pruning underperformers" }, ", not adding funds."]
-    : [`Add to ${plural(counts.invest, "fund")} and hold ${counts.hold}. The portfolio is on track — no exits are recommended at this time.`];
+    ? [`Add to ${plural(counts.invest, "fund")}, hold ${counts.hold} and sell ${counts.sell} (in full or in part). The priority is `, { b: "consolidating into the stronger holdings" }, " rather than adding new funds."]
+    : [`Add to ${plural(counts.invest, "fund")} and hold ${counts.hold}. The portfolio is on track — no sales are recommended at this time.`];
 
   return [
     { key: "composition", title: "COMPOSITION", icon: "◆", tone: "navy", parts: composition },
@@ -158,12 +158,15 @@ const IN_LINE_PP = 1;   // within ±1 pp over 1Y the fund is described as in lin
  * hasRecommended: false when the advisor skipped the recommended portfolio, so the
  * text never points to a Prosperr Recommended Portfolio that is not in the report.
  */
+const formatRupees = (x) => `₹${Math.round(x).toLocaleString("en-IN")}`;
+
 export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
   const r1 = row.returns?.r1y;
   const b1 = row.benchmarkReturns?.r1y;
   const hasData = typeof r1 === "number" && typeof b1 === "number";
   const edge = hasData ? r1 - b1 : null;
   const precious = row.assetClass === "goldSilver";
+  const call = row.call ?? {};
 
   // The one-year comparison, stated as it is: ahead / in line / behind its own benchmark.
   const yearVs = () => (edge > IN_LINE_PP
@@ -171,38 +174,50 @@ export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
     : edge < -IN_LINE_PP
       ? `behind ${benchName(row)} over the last year (${pct1(r1)} vs ${pct1(b1)}, ${signed1(edge)})`
       : `in line with ${benchName(row)} over the last year (${pct1(r1)} vs ${pct1(b1)})`);
+  const lead = hasData ? `${row.name} is ${yearVs()}; ` : `${row.name}: `;
   if (verdict === "invest") {
     if (hasData && edge > IN_LINE_PP) {
-      return `${row.name} has been a standout — ${pct1(r1)} over the last year versus ${pct1(b1)} for ${benchName(row)} (an edge of ${signed1(edge)}). A high-conviction ${className(row)} holding; consider adding to it and letting it take a larger share of your allocation.`;
+      return `${row.name} has outperformed ${benchName(row)} over the last year (${pct1(r1)} vs ${pct1(b1)}, ${signed1(edge)}). Supported by a consistent longer-term record, it remains a high-conviction ${className(row)} holding and is our preferred destination for fresh investment.`;
     }
     return hasData
-      ? `${row.name} is ${yearVs()}; its longer-term record makes it ${aClass(row)} holding to build on — consider adding to it.`
-      : `${row.name} is recommended for fresh investment — consider adding to it and letting it take a larger share of your allocation.`;
+      ? `${lead}its longer-term record makes it ${aClass(row)} holding to build on, and it is suitable for fresh investment.`
+      : `${row.name} is recommended for fresh investment on the strength of its record against its category and benchmark.`;
   }
   if (verdict === "hold") {
     if (precious) {
-      return `${row.name} is doing its job as a gold/silver holding${typeof r1 === "number" ? ` (1Y ${pct1(r1)})` : ""}, adding stability and diversification to the portfolio. Maintain the current allocation and continue your existing investments — an equity index is not its benchmark.`;
+      return `${row.name} continues to serve its purpose as a gold / silver allocation${typeof r1 === "number" ? ` (1Y ${pct1(r1)})` : ""}, adding stability and diversification; an equity index is not its benchmark. We recommend holding the current position.`;
     }
     return hasData
-      ? `${row.name} is ${yearVs()}. It remains ${aClass(row)} holding — maintain the current allocation and continue your existing investments.`
-      : `${row.name} remains a solid holding — maintain the current allocation and continue your existing investments.`;
+      ? `${lead}we recommend holding the current position, with fresh investment directed to the funds marked Invest.`
+      : `We recommend holding ${row.name} at its current position, with fresh investment directed to the funds marked Invest.`;
   }
   if (verdict === "sell") {
     // Each claim only when it is the actual basis of the call: a portfolio-fit exit is about consolidation, and
-    // "trails its peers" is said only of a fund the logic graded weak (not of a sale the advisor chose).
-    const redeploy = hasRecommended ? "the Prosperr Recommended Portfolio" : "the funds marked Invest";
-    if (row.call?.stage === "portfolio") {
-      return `${row.name}${hasData ? ` is ${yearVs()}` : ""}${hasData ? ";" : ""} we recommend exiting it to consolidate the portfolio into fewer, stronger funds (see the Suggestion Box) and redeploying the proceeds into ${redeploy}.`;
+    // "trails its peers" is said only of a fund the logic graded weak on its longer-term record.
+    const fallback = hasRecommended ? "the Prosperr Recommended Portfolio" : "the funds marked Invest";
+    const named = call.move && !/^the /.test(call.move) ? call.move : null;   // a specific fund the logic chose
+    const redeploy = named ?? fallback;
+    if (call.trim) {
+      return `${lead}it stays in the portfolio, but we recommend reducing it from ${call.trim.fromPct.toFixed(1)}% to ${call.trim.toPct.toFixed(1)}% of the portfolio (see the Suggestion Box), releasing about ${formatRupees(call.trim.amount)} for ${redeploy}.`;
     }
-    if (hasData && edge >= 0 && row.call?.grade !== "WEAK") {
+    if (call.stage === "portfolio") {
+      return `${lead}we recommend exiting it to consolidate the portfolio into fewer, stronger funds (see the Suggestion Box) and redeploying the proceeds into ${redeploy}.`;
+    }
+    if (call.ruleId === "overlap-weaker" || call.ruleId === "weakest-in-category") {
+      return `${lead}it largely duplicates ${named ?? "a stronger fund held in the portfolio"}${call.ruleId === "overlap-weaker" ? ", holding many of the same stocks" : " in the same category"}, which has the better record. We recommend consolidating into ${redeploy}.`;
+    }
+    if (call.ruleId === "young-1y-no-recovery") {
+      return `${lead}with less than three years of record, it ranks in the bottom quarter of its category over the past year and has not recovered over the last three to six months. We recommend exiting and redeploying the proceeds into ${redeploy}.`;
+    }
+    if (hasData && edge >= 0 && call.grade !== "WEAK") {
       return `${row.name} is ${yearVs()}. We recommend exiting it and redeploying the proceeds into ${redeploy}.`;
     }
     if (hasData && edge >= 0) {
-      return `${row.name} returned ${pct1(r1)} over the last year (vs ${pct1(b1)} for ${benchName(row)}), but we are flagging it for exit — its longer-term record trails its peers and we see better risk-adjusted opportunities in the same ${className(row)} space. Consider redeploying into a higher-conviction performer.`;
+      return `${row.name} returned ${pct1(r1)} over the last year (vs ${pct1(b1)} for ${benchName(row)}), but its longer-term record trails its peers on a consistent basis, and we see better risk-adjusted opportunities in the same ${className(row)} space. We recommend exiting and redeploying the proceeds into ${redeploy}.`;
     }
     return hasData
-      ? `${row.name} has underperformed — ${pct1(r1)} over the last year versus ${pct1(b1)} for ${benchName(row)}. Consider exiting and redeploying into a stronger performer.`
-      : `${row.name} is flagged for exit — consider redeeming and redeploying the proceeds into ${hasRecommended ? "the Prosperr Recommended Portfolio" : "higher-conviction funds"}.`;
+      ? `${row.name} has lagged ${benchName(row)} over the last year (${pct1(r1)} vs ${pct1(b1)})${call.grade === "WEAK" ? " and trails its peers over the longer term" : ""}. We recommend exiting and redeploying the proceeds into ${redeploy}.`
+      : `We recommend exiting ${row.name} and redeploying the proceeds into ${hasRecommended ? "the Prosperr Recommended Portfolio" : "higher-conviction funds"}.`;
   }
   return `${row.name} — recommendation not set.`;
 }

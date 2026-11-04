@@ -145,8 +145,10 @@ def main() -> int:
         timings["amfiHistory"] = round(time.monotonic() - started)
         # AMFI's history report lags the daily file by a day or two: each scheme's latest NAV comes
         # from the daily file itself (the official latest NAV), as printed.
+        # A NAV dated after today waits until that day: a run on or after it collects it.
+        today = settings.india_today()
         for row in parse_nav_file(text):
-            if row.nav is not None and row.scheme_code in by_code:
+            if row.nav is not None and row.scheme_code in by_code and row.nav_date <= today:
                 points.setdefault(row.scheme_code, {})[row.nav_date] = row.nav_text
         print(f"AMFI NAVs {start} to {as_of} (history report + daily file): "
               f"{sum(len(p) for p in points.values())} NAVs for {len(points)} schemes")
@@ -197,7 +199,7 @@ def main() -> int:
         new_schemes = [s for c, s in by_code.items() if c not in stored and c not in known_bad and s["active"]]
         ctx = {"client": client, "mfapi": settings.get("MFAPI_BASE_URL", config), "amfi": points, "as_of": as_of,
                "history_template": settings.get("AMFI_NAV_HISTORY_URL", config),
-               "today": datetime.now(timezone.utc).date(), "pacer": Pacer(MIN_INTERVAL_SECONDS)}
+               "today": today, "pacer": Pacer(MIN_INTERVAL_SECONDS)}
         new_stored, new_rejected = [], []
         for scheme in new_schemes:
             if args.dry_run:

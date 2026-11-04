@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peer_stats import (  # noqa: E402
-    MIN_PEERS, Series, attach_benchmarks, benchmark_figures, drawdown_3y, fund_figures, last_completed_month_end, month_ends, nav_on, peer_statistics,
+    MIN_PEERS, Series, attach_benchmarks, same_day_fund, benchmark_figures, drawdown_3y, fund_figures, last_completed_month_end, month_ends, nav_on, peer_statistics,
     period_start, quartile, sharpe_3y, trailing,
 )
 
@@ -129,6 +129,26 @@ class BenchmarkFigureTests(unittest.TestCase):
         funds = {"1": {"navDate": "2026-10-21"}}
         mapping = {"funds": {"1": {"benchmarkCode": "AUB11", "benchmarkName": "CRISIL Hybrid 35+65 - Aggressive Fund Index"}}}
         self.assertEqual(attach_benchmarks(funds, mapping, {"AUB11": growth_series(0.1)}), 1)
+
+
+class SameDayTests(unittest.TestCase):
+    def test_fund_is_given_on_the_index_date_only_when_the_index_is_older(self):
+        day = date(2026, 10, 30)
+        own = {"recent": {day: [0.1, 0.2, 0.3]}}
+        self.assertEqual(same_day_fund(own, {"anchorDate": "2026-10-30"}, date(2026, 11, 2)), {"fund": {"r1y": 10.0, "r3y": 20.0, "r5y": 30.0}})
+        self.assertEqual(same_day_fund(own, {"anchorDate": "2026-10-30"}, day), {})
+        self.assertEqual(same_day_fund(None, {"anchorDate": "2026-10-30"}, date(2026, 11, 2)), {})
+
+
+class ShortTermTests(unittest.TestCase):
+    def test_short_term_returns_and_one_year_rank_are_published(self):
+        from peer_stats import fund_figures as figures_of
+        series = growth_series(0.12)
+        ends = month_ends(last_completed_month_end(series.dates[-1]), 24)
+        f = figures_of(series, ends)
+        self.assertIsNotNone(f["r3m"])
+        self.assertIsNotNone(f["r6m"])
+        self.assertLess(f["r3m"], f["r6m"])
 
 
 class PeerTests(unittest.TestCase):

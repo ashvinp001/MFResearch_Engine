@@ -1,7 +1,20 @@
-# Prosperr — Invest / Hold / Sell Recommendation Logic · v1.4
+# Prosperr — Invest / Hold / Sell Recommendation Logic · v2.0
+
+> **v2.0 (02-Nov-2026, owner's decisions).** Stage 2 is rebuilt as one decision for the whole portfolio, so no call can
+> contradict another (§5):
+> - **One ranking.** Every comparison uses one order: the Stage 1 grade, then the fund's place inside this portfolio.
+> - **One walk, best fund first.** A fund gives way only to a stronger fund that takes new money: no chain, no two funds
+>   pointing at each other, and a STRONG fund never gives way to a MIXED one.
+> - **Money moves only to a final INVEST fund.** When a limit takes an INVEST away, the decision runs again.
+> - **The Stage 1 grade is never rewritten.** A sale for overlap or fit does not make a fund WEAK.
+> - **Partial sales.** A fund above a limit is cut to the limit, with the percentages, the amount and the reason.
+> - **Index funds / ETFs:** at most 20% of the portfolio together, and at most 2–3 funds.
+> - **Consolidation is staged:** the same rule at every size, at most 25% of the portfolio per review for the fund count.
+> - **Stage 1:** a SELL needs independent evidence; a sector fund ahead of its own index is kept; STRONG never has a
+>   negative Risk or Benchmark pillar. Joining Stage 1 to the Fund Scorecard is left for later (owner's decision).
 
 > **v1.4 (23-Oct-2026, owner's decisions):** Stage 2 now judges each fund **inside this portfolio** (§5.2):
-> - **Too many funds for the portfolio's size** (its own Diversification range) → the weakest Hold funds exit,
+> - (Replaced by v2.0 §5.) **Too many funds for the portfolio's size** (its own Diversification range) → the weakest Hold funds exit,
 >   small holdings first, until the count is back in range. A small holding is relative to the portfolio, not fixed.
 > - **Index funds / ETFs**: at most 2 (portfolios whose ideal maximum is ≤ 6 funds) or 3 → the extra ones exit.
 > - **Sectoral / thematic, gold / silver, overseas above 15%** → the weaker fund of that group exits; a fund house
@@ -68,8 +81,9 @@
 
 1. **Data first.** A figure that is missing or cannot be computed is **UNKNOWN (?)**. It never passes and
    never fails a test, and it is never replaced by 0 or an estimate.
-2. **No single-metric SELL.** SELL needs persistent under-performance (pillar R, §3) **plus** at least one
-   independent pillar that confirms it.
+2. **No single-metric SELL.** Stage 1 needs persistent under-performance (pillar R, §3) **plus** independent evidence:
+   Risk or Benchmark, or Rank and Consistency together (each of those two comes from the same returns as R).
+   Stage 2 sales are about the portfolio, not the fund's own record, and say so.
 3. **Compare like with like.** The peer group is the same **AMFI category, asset class and plan**
    (Direct vs Direct, Regular vs Regular, ETF vs ETF), over the same periods and at the same data date.
    - AMFI's labels are used exactly as published; nothing is merged or renamed.
@@ -136,11 +150,17 @@ and funds whose benchmark is a Pulse-made multi-index blend — those blends do 
 | Grade | Rule |
 |---|---|
 | **REVIEW** | no 3Y comparison is possible (see §4.7) |
-| **WEAK** | R − **and** at least one of K, C, S, B is − |
-| **STRONG** | R + **and** C + **and** (K + or S +). If C is unknown: R + **and** K + **and** S + |
+| **WEAK** | R − **and** (S − or B −, or both K − and C −) |
+| **STRONG** | R + **and** C + **and** (K + or S +), with neither S nor B −. If C is unknown: R + **and** K + **and** S + |
 | **STRONG** (v1.1) | R + **and** B + **and** none of K, C, S is − — ahead of both the category and its own benchmark on 3Y and 5Y |
 | **WEAK** (v1.1, "in line" but behind both) | behind the category median on 3Y and 5Y (any margin) **and** B − **and** none of K, C, S is + |
 | **MIXED** | everything else: the evidence genuinely disagrees. R − with nothing confirming it is MIXED with the note "watch" |
+
+**1-year rule (owner, v2.0) — young funds only** (no 3-year record; their year is all the record there is). A fund in the
+bottom quarter of its category over 1Y, and behind its median by more than 2 pp (0.3 pp for debt and arbitrage, whose
+funds sit within basis points of each other), is **held** when it is at or above
+the category median over 6M or 3M (recovering), and becomes **WEAK → SELL** when it is below on both. Any other young fund
+stays **REVIEW** (the advisor decides), as does a fund under one year old. Established funds are judged on 3Y and 5Y. The 3M / 6M returns and the 1Y rank come from the daily peer statistics.
 
 The benchmark never decides alone: every SELL needs the category comparison to agree.
 
@@ -171,7 +191,7 @@ The **sector index** is compared with the broad market (**NIFTY 500**, total ret
 How it is used:
 | Fund | Sector not performing | Sector ahead | Otherwise |
 |---|---|---|---|
-| Active sectoral / thematic fund (benchmark is a sector index) | **SELL** if the fund itself is also behind the market on 3Y and 5Y; **HOLD** if the fund is ahead of the market | the own-index rule above (§4.2) | §4.2 |
+| Active sectoral / thematic fund (benchmark is a sector index) | **SELL** if the fund is behind the market on 3Y and 5Y **and** not ahead of its own index; otherwise **HOLD**, no new money | the own-index rule above (§4.2) | §4.2 |
 | Sector index fund / ETF | **SELL** | **INVEST** (if it tracks its index within 1 pp a year, when known) | **HOLD** |
 
 - The sector is measured on the **sector index itself** (the fund's mapped benchmark), so every fund on that index
@@ -190,8 +210,7 @@ Aggressive, Balanced Advantage / Dynamic, Multi-Asset, Equity Savings, Conservat
 
 ### 4.4 Arbitrage
 Only R and K count:
-- R+ and K+ → STRONG
-- R− and K− → WEAK
+- R, K and B are the only measures (§4.5 gives the rule)
 - otherwise MIXED
 
 ### 4.5 Debt
@@ -208,18 +227,19 @@ Only R and K count:
   fund → **REVIEW** ("possible credit event — check before acting"). Gilt, long-duration, dynamic and
   constant-maturity funds are exempt, because interest rates move their NAVs.
 - **Grades:**
-  - **WEAK** = R− and (K− or S− or Q− or B−); or behind the category on 3Y and 5Y and B−, nothing positive
+  - **WEAK** = R− and (S− or Q− or B−) — rank alone is the same returns as R, so it never confirms a SELL; or behind
+    the category on 3Y and 5Y and B−, nothing positive
   - **STRONG** = R+ and (K+ or S+ or B+), with none of S, Q, B −
   - **MIXED** otherwise
 
-Arbitrage (§4.4) uses R, K and B the same way.
+Arbitrage adds B the same way: WEAK = R− and B−; STRONG = R+ and (K+ or B+), with neither −.
 
 ### 4.6 Index funds / ETFs, and HOLD by type
 **Index funds and ETFs** are judged on tracking: fund 3Y return − its index's 3Y return.
 - within −1.00 pp a year (or ahead) → **INVEST**
 - further behind → **HOLD** ("trailing its index")
 - under 3 years, or no benchmark data (ETFs are not in the benchmark mapping) → **HOLD**
-- two index funds on the **same index**: the closer tracker gets INVEST, the other HOLD ("consider consolidating").
+- two index funds on the **same index**: the stronger gets INVEST, the other HOLD ("consider consolidating").
 
 **HOLD by type (never auto INVEST or SELL):**
 - **Gold / silver / commodity funds:** held for diversification.
@@ -234,96 +254,101 @@ Arbitrage (§4.4) uses R, K and B the same way.
 | AMFI "(legacy)" category | no clean peer set |
 | Less than 3 years of NAV history | "Only X years of NAV history" |
 | Fewer than 5 peers with a 3Y record **and no benchmark data** | no fair comparison (with a benchmark, the fund is judged against it alone, as in §4.2 — e.g. Regular Contra: 3 funds) |
-| Latest NAV more than 7 days older than the peer data | stale data |
-| No peer statistics for the fund | NAV not current or not stored |
-| Debt credit-event guard (§4.5), weak sectoral fund (§4.2) | as stated |
+| No peer statistics for the fund | NAV not current (more than 7 days old) or not stored |
+| Debt credit-event guard (§4.5) | as stated |
 | Weak ELSS with no transaction history in the CAS | lock-in cannot be determined |
 
 ---
 
-## 5. Stage 2: portfolio level
+## 5. Stage 2: one decision for the portfolio
 
-Stage 2 runs in this order. Each condition is defined once (`auto-recommendation.js`); the Suggestion Box (§5.3)
-reads the same results and adds no rule of its own.
+Every step is in `portfolio-fit.js`, in this order. Steps never rewrite the Stage 1 grade.
 
-### 5.1 Fund against fund (tie-breaks)
+### 5.1 One ranking
+Funds are ordered by the Stage 1 grade, then by a score (0–100): the fund's percentile among the funds held, on the
+measures it has: return lead over its category (else its benchmark), Sharpe and drawdown against the category median,
+consistency, and overlap with the other funds (less is better). Category, index and overlap decisions and the
+exit order all use this one order, so they cannot disagree.
 
-1. **INVEST blockers.** A STRONG fund is moved to **HOLD**:
-   - when it is already **more than 20%** of the portfolio, or
-   - when its 1Y return trails the category median by **more than 5 pp** — a sharp fall ("hold until it recovers").
-2. **Several funds in one AMFI category (any plan).**
-   - Rank them: STRONG before MIXED, then by e3 + e5 (e3 + e1 when there is no 5Y figure).
-   - The **best STRONG fund without a blocker gets INVEST**. If the top fund is blocked, the next STRONG
-     fund takes its place.
-   - Other STRONG funds → **HOLD**: "Strong, but X ranks higher".
-   - Every other fund in the category gets the note "Same category as X — consider consolidating; new money
-     goes to Y".
-   - **Weakest duplicate (owner's rule, v1.1):** a non-leading MIXED fund that is behind its category median
-     **and** its own benchmark on both horizons (3Y and 5Y; 3Y and 1Y without 5Y), by any margin → **SELL**
-     ("consolidate into the stronger fund"). A fund ahead of either yardstick on either horizon is kept.
-   - A STRONG fund is never sold for being second best.
-   - Index funds and sectoral / thematic funds are not ranked here (§4.2, §4.6).
-3. **WEAK ELSS** with locked units → **HOLD**: "N units in the ELSS lock-in (all free by DD-MMM-YYYY) —
-   review then". Fully free units → SELL as usual.
-4. **Regular and Direct plans** are both recommended: no switch note (v1.2, owner's decision). Each plan is
-   compared with its own plan's peers.
-5. **Overlap between funds** (PulseDB holdings): see v1.3 at the top — **≥ 50%** overlap (v1.4) between two
-   active equity funds acts on the weaker one.
+**One fund = one call:** the same scheme in several folios or both plans is judged once (v1.3).
 
-### 5.2 Fund inside this portfolio — portfolio fit (v1.4)
+### 5.2 Fund against fund
+Before the walk, a STRONG fund above 20%, or more than 5 pp behind its category over 1Y, takes no new money.
 
-**Limits, all from this portfolio:**
+The funds are walked **best first**. A fund has the same exposure as an earlier INVEST fund when it is in the same AMFI
+category (active funds), tracks the same index (index funds, sectoral funds), or shares at least 50% of its stocks
+(active equity funds, on at least 4 comparable measures).
+- No such fund, and STRONG with nothing stopping it → **INVEST**.
+- STRONG → **HOLD**, new money goes to that fund. A STRONG fund is never sold for this.
+- MIXED with high overlap → **SELL**, consolidate into that fund.
+- MIXED in the same category, behind its category and its benchmark on both horizons by more than 0.5 pp, with no
+  positive pillar → **SELL**, consolidate into that fund.
+- Anything else → **HOLD**, with a note.
 
-| Limit | Value |
-|---|---|
-| Ideal fund count | the Diversification range for the portfolio's value: < ₹5L 2–4 · ₹5L–25L 3–6 · ₹25L–1Cr 4–8 · ₹1Cr–5Cr 5–10 · > ₹5Cr 6–13. Funds counted by ISIN, as the report does |
-| Small holding | below ¼ of the average fund share at the ideal maximum (100 ÷ max × 0.25): e.g. max 8 → 3.1%, max 4 → 6.25% |
-| Index funds / ETFs | at most 2 when the ideal maximum is ≤ 6 funds, else 3 (gold / silver ETFs are counted under gold / silver) |
-| Themes | sectoral / thematic (incl. sector index funds / ETFs), gold / silver, overseas: 15% each |
-| Fund house | 40% |
+Two funds that overlap with no INVEST fund between them are both held; the weaker is first in line in a consolidation.
 
-**Exits.** While a limit (fund count, index funds / ETFs, a theme) is exceeded, one fund at a time exits:
-- **Who can exit:** a fund whose call is HOLD. A STRONG fund only when it is a small holding *and* a duplicate of
-  the STRONG fund taking new money in its category / index / overlap pair.
-- **Never:** the STRONG fund that takes the new money in its category, index or overlap pair; a STRONG fund above
-  20%; an ELSS fund with units in the lock-in (or a lock-in that cannot be told); the last hybrid, debt or gold
-  fund; for a theme / index-fund limit, the strongest fund of that group; INVEST and REVIEW funds.
-- **Which first:** the candidate that relieves the most open limits (so the fewest funds are sold); then a small
-  holding → a duplicate of a STRONG fund → a fund of a fund house above 40% → the weakest (grade, then 3Y + 5Y
-  lead over its category or benchmark) → the smallest.
-- **Stop:** as soon as every limit is met, or no candidate is left (the Suggestion Box then still says the
-  portfolio is above its range).
-- **Reason shown:** "Portfolio fit — the portfolio holds 29 funds where 4–8 suit its size. This fund: a small holding
-  (0.6% of the portfolio); HDFC Nifty 50 Index Fund already covers the same index — exit and move the money to HDFC
-  Nifty 50 Index Fund. On its own: …" The PDF says the fund is exited to consolidate — never that it trails its
-  peers unless the logic graded it WEAK.
+### 5.3 Limits
 
-**No new money.** After the exits, an INVEST in a fund house above 40%, or in a theme still above its limit,
-becomes HOLD ("no new money to this fund house" / "into them").
+| Step | Limit | Action |
+|---|---|---|
+| Index funds / ETFs (equity; not gold, silver or debt) | at most 2 funds when the ideal maximum is ≤ 6, else 3; at most 20% together | a second fund on an index already held exits first, then one from the segment furthest above the basket, then the weaker tracker; the rest share the 20%: equal when alike, 60 / 40 when only the better fund is STRONG |
+| All index funds poor | every one trails its index beyond the tracking limit | all exit; the Suggestion Box names the NIFTY 50 fund with the best average tracking difference over 1, 3 and 5 years for 10% of the portfolio |
+| Themes | sectoral / thematic (with sector index funds) and gold / silver: 15% each | cut to the limit, weakest first; a non-STRONG fund that fits inside the excess exits in full |
+| Overseas | overseas FoFs and index funds, Indian thematic funds on an overseas index (US Equity, S&P 500) and domestic FoFs holding overseas funds: 30% together | the funds share the limit: equally, or 60 / 40 when one of two is clearly better (20 or more score points) |
+| Debt + arbitrage | no limit on the total; very few funds: at most 2 (1 when the ideal maximum is ≤ 4), in equal shares | the strongest stay, the others exit; the money stays in debt when a debt fund is INVEST. Larger funds are cut to the equal share only then, else the box states the target |
+| One fund | 20%, or an equal share when fewer than five funds remain | cut to the limit. Index funds are under their own limit; debt and arbitrage funds are left out, because moving them would change the portfolio's risk |
+| Fund count | the Diversification range: < ₹5L 2–4 · ₹5L–25L 3–6 · ₹25L–1Cr 4–8 · ₹1Cr–5Cr 5–10 · > ₹5Cr 6–13 | exits, staged (below) |
+| Fund house, theme, index funds at their limit | 40% / 15% / 20% | INVEST → **HOLD**, no new money; the next STRONG fund takes its place |
 
-### 5.3 Suggestion Box (screen and PDF, end of Section 05)
+A cut smaller than 1% of the portfolio is not worth the transaction and tax and is left alone (when one index fund's cut is
+too small, the others take it, so index funds still end at 20%). A cut that would leave less than a small holding becomes a
+full exit. A debt or arbitrage fund is never stopped for being above 20%. Units in the ELSS lock-in are never sold, and a fund kept by its
+lock-in stays in every count.
 
-One line per point, phrased so it stays true when the advisor changes a call:
-- the fund count against the ideal range (when above it)
-- index funds / ETFs above their limit
-- each fund house above 40%; each theme above 15% (with "marked for exit" or "no new money")
-- each fund above 20% (index funds / ETFs exempt)
-- each overlap pair acted on
-- the same fund in several folios (merge through the registrar — no sale) or in both plans (consolidate)
+**Fund count — the same rule at every size.** One fund at a time exits until the count is in range:
+- **Order:** a small holding (below ¼ of the average share at the ideal maximum) → a fund that overlaps a fund kept →
+  a fund in the part of the equity furthest above the basket (below) → a fund of a fund house above 40% →
+  the weakest in the ranking.
+- **Never:** an INVEST fund; a REVIEW fund; a STRONG fund, unless it is a small duplicate of an INVEST fund; an ELSS
+  fund with locked or unknown units; the last hybrid, debt or gold fund.
+- **Staged:** these exits sell at most 25% of the portfolio per review. The rest waits for later reviews, and the
+  Suggestion Box says so. WEAK funds and limit cuts are not staged.
+
+**Large / Mid / Small basket.** The reference follows the portfolio's risk profile and horizon (`report-profile.js`). Each
+is placed in a tier, and the lower tier decides, because either one alone can rule out small caps:
+
+| Basket | Risk profile | Horizon | Large / Mid / Small |
+|---|---|---|---|
+| Conservative | Conservative, Moderately Conservative | Short, Mid Term | 65 / 25 / 10 |
+| Balanced | Moderate | Mid to Long Term | 50 / 30 / 20 |
+| Growth | Moderately Aggressive, Aggressive | Long Term | 35 / 35 / 30 |
+
+It has no hard limit: it steers which fund exits first, and the Suggestion Box shows the basket and the split after the changes.
+Among index funds, the best average tracking difference (fund − index) over 1Y, 3Y and 5Y decides; AUM is not used.
+
+### 5.4 Where the money goes
+To the fund a sale gave way to, when it is INVEST in the final result; else to an INVEST fund **on the same side of the
+portfolio**: equity money to equity funds, debt money to the debt fund furthest below its equal share, so a sale never
+changes the portfolio's risk on its own; else to the Prosperr Recommended Portfolio. When a limit takes an INVEST away, §5.2–§5.3 run again until nothing
+changes, so a sale can never name a fund that is itself sold or closed to new money.
+
+### 5.5 Suggestion Box (screen and PDF, end of Section 05)
+It reads the same decision and states only what was done: the fund count and how far this review takes it, index funds,
+each reduction with percentages and amount, fund houses, themes, overlap, funds still above 20%, the Large / Mid / Small
+split, folios and plans.
 
 ---
 
 ## 6. Final mapping to the three buttons
 
-| Grade | Situation | Pre-selected |
-|---|---|---|
-| STRONG | best investable fund in its category | **INVEST** |
-| STRONG | not the best / above 20% / 1Y more than 5 pp behind / fund house or theme above its limit | **HOLD** |
-| MIXED, or a HOLD type (§4.6) | — | **HOLD** |
-| any HOLD (STRONG only if a small duplicate) | portfolio fit exit (§5.2) | **SELL** |
-| WEAK | units free | **SELL** |
-| WEAK | ELSS units locked | **HOLD** |
-| REVIEW | — | *nothing pre-selected*: the reason is shown and the advisor chooses |
+| Situation | Pre-selected |
+|---|---|
+| STRONG, first in its exposure, no limit stops it | **INVEST** |
+| STRONG, behind an INVEST fund, or stopped by a limit | **HOLD** |
+| MIXED or a HOLD type (§4.6), not sold in §5.2–§5.3 | **HOLD** |
+| WEAK, or sold in §5.2 / §5.3 | **SELL** (ELSS with locked units: **HOLD**) |
+| Above a limit | **SELL**, a partial sale: from → to, amount and reason. The rest stays invested and counts as Hold in the summary |
+| REVIEW | *nothing pre-selected*: the reason is shown and the advisor chooses |
 
 **INVEST** means "a candidate for fresh money". It never means "buy more regardless of weight".
 
@@ -384,11 +409,28 @@ One line per point, phrased so it stays true when the advisor changes a call:
 | P4 | Count and index-fund limits both open | the exit relieving both is chosen first; fewest funds sold | ✅ |
 | P5 | Thematic funds 22% (limit 15%); a lone strong thematic fund at 20% | the weaker exits; the lone one INVEST → HOLD | ✅ |
 | P6 | One fund house at 45%, count within range | its INVESTs → HOLD; nothing sold | ✅ |
-| P7 | Portfolio within every limit | Stage 2b changes nothing | ✅ |
+| P7 | Portfolio within every limit | Stage 2 changes nothing | ✅ |
 | P8 | Suggestion Box: folios, both plans, overlap | listed, independent of the final calls | ✅ |
 | P9 | 400 random portfolios (1–30 funds, every value band) | no large STRONG fund, locked ELSS or last gold fund exited; no exit without an open limit; count exits stop at the ideal maximum | ✅ |
 | P10 | Overlap 55% / 45% | acted on / not | ✅ |
 | P11 | PDF Sell commentary | "trails its peers" only for a fund graded WEAK; portfolio-fit exits say "consolidate" | ✅ |
+
+| C1 | Same category and high overlap | one fund INVEST, never pointing at each other | ✅ |
+| C2 | STRONG against a MIXED fund | STRONG stays INVEST | ✅ |
+| C3 | Chain of overlapping funds | no consolidation into a sold fund | ✅ |
+| C4 | Index funds: both good 24% / one poor / all poor / four good | 10–10 / 12–8 / all exit / best three stay | ✅ |
+| C5 | Weak ELSS kept by its lock-in | stays in the fund count | ✅ |
+| C6 | Overseas funds alike / one clearly better | share 30%: equal / 18–12 | ✅ |
+| C6b | Debt at 70%; four debt funds | left alone; strongest stay, money stays in debt | ✅ |
+| C6c | Risk and horizon | the lower decides the basket | ✅ |
+| C7 | 20 funds, ideal 6–13 | 5 exit this review (25% of value); the rest staged | ✅ |
+| C8 | Partial sale | from → to, amount, destination | ✅ |
+| C9 | Weak equity fund, only debt funds INVEST | money to the Recommended Portfolio, never into debt | ✅ |
+| C10 | Two funds on one index; a cut leaving a stub | the duplicate exits first; the stub exits in full | ✅ |
+| Y1 | Young fund in the bottom quarter over 1Y: recovering / not; established fund | HOLD / SELL; not judged on 1Y | ✅ |
+| Y2 | Gold-mining FoF; US equity thematic fund | overseas equity; inside the overseas limit | ✅ |
+
+The dry runs below are from earlier versions and are kept as history.
 
 **Real-CAS dry run, v1.4** (29 funds, ₹88.7L → ideal 4–8): 8 INVEST · 3 HOLD · 17 SELL · 1 REVIEW; 14 portfolio-fit exits, 12 funds
 remain (the rest are INVEST funds, the last debt fund and a REVIEW fund — not forced out). Every exit checked:
@@ -438,9 +480,9 @@ with concentration flags.
 6. **Peer statistic:** the median, not the average (one outlier fund cannot move it).
 7. **REVIEW funds:** left unselected, so the advisor must choose before the report.
 8. **Sectoral / thematic:** judged against their own index only (v1.1); SELL needs every horizon behind.
-9. **Portfolio fit (v1.4, `RECOMMENDATION.fit`):** small holding = 0.25 × the average share at the ideal maximum;
-   index funds / ETFs at most 3 (2 when the ideal maximum is ≤ 6); overlap from 50%. Risk profile / horizon fit is
-   deferred to the Financial Plan.
+9. **Portfolio (`RECOMMENDATION.fit`):** small holding = 0.25 × the average share at the ideal maximum; index funds / ETFs
+   at most 3 (2 when the ideal maximum is ≤ 6) and 20% together; overlap from 50%; 25% of the portfolio per review for
+   fund-count exits; Large / Mid / Small baskets (§5.3); duplicate gap 0.5 pp; overseas 30%.
 
 ---
 
@@ -449,7 +491,7 @@ with concentration flags.
 | Part | File |
 |---|---|
 | Thresholds | `calculation-engine/config.js` (RECOMMENDATION) |
-| Decision engine (pure, no DOM) | `calculation-engine/portfolio-analyzer/auto-recommendation.js` |
+| Decision engine (pure, no DOM) | `calculation-engine/portfolio-analyzer/`: `fund-grading.js` (Stage 1), `portfolio-fit.js` (Stage 2), `auto-recommendation.js` (joins them) |
 | Peer statistics (daily, after the NAV update) | `data-pipeline/peer_stats.py` → Supabase `stats/peer-stats.json` |
 | Website endpoint | `/api/peer-stats?codes=` → `data-pipeline/peer_stats_api.py` |
 | Step 3 screen | `app/portfolio-analyzer/screens/recommendation-screen.js` |

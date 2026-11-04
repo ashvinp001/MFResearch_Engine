@@ -185,7 +185,7 @@ holdings[]  { isin, schemeName, rtaSchemeCode, amc, folio, pan, registrar, statu
               openingUnits, units, nav, navDate, costValue, marketValue, averageCost, printedGain,
               raw { …same fields as printed strings },
               transactions[] { date, description, amount, units, price, unitBalance, raw },
-              category, assetClass,            // Phase 2 enrichment
+              category, assetClass,            // enriched from fund data
               flags[] }
 printedTotals { totalCostValue, totalMarketValue, raw }
 integrity   { status: "ok" | "needs_review", checks[], warnings[] }
@@ -259,9 +259,8 @@ funds (owner's rule) and arbitrage funds (hedged stock positions). One page:
 Returns & Risk is Section 05, Conclusion & Recommendation Section 06. A blended return is shown only when every
 fund has that period. Without fund data, the holdings form one ungrouped list and analytics are `null`.
 
-**Fund data (Phase 2).** `getFundData(portfolio)` currently returns `null`. Its `FundData` /
-`FundInfo` typedefs in `market/fund-data-provider.js` define exactly what the reports will consume.
-All analytics fields render as "—" until it is connected. Nothing is estimated.
+**Fund data.** `buildFundData` produces what the reports consume; its `FundData` / `FundInfo` typedefs are in
+`portfolio-analyzer/portfolio-performance.js`. A figure that is not available renders as "—". Nothing is estimated.
 
 ---
 
@@ -311,8 +310,8 @@ browser's "Save as PDF" through `app/shared/print.js`. The report element is clo
 
 | Report | Layout | Wording | Styles | Reference |
 |---|---|---|---|---|
-| One-Pager Snapshot | `snapshot-sheet.js`, `snapshot-format.js` | `snapshot-copy.js` | `design-system/portfolio-analyzer/snapshot.css` | *Sample Portfolio Review.pdf* |
-| Detailed Recommendation | `detailed-report.js` | `detailed-copy.js` | `design-system/portfolio-analyzer/detailed-report.css` | *Portfolio Review & Recommandation Updated.pdf* |
+| One-Pager Snapshot | `snapshot-sheet.js`, `snapshot-format.js` | `snapshot-copy.js` | `design-system/portfolio-analyzer/snapshot.css` | The owner's one-page review format |
+| Detailed Recommendation | `detailed-report.js`, `detailed/section-*.js`, `detailed/page-layout.js` | `detailed-copy.js` | `design-system/portfolio-analyzer/detailed-report.css` | The owner's Portfolio Review & Recommendation format |
 
 **Detailed report pagination.** Pages are filled **by measurement** in a hidden staging area after
 fonts load. A section writer appends blocks and tables, and when content overflows a page, it moves

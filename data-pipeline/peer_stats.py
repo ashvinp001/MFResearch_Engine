@@ -6,6 +6,7 @@ Usage:
 
 For every stored, active scheme whose latest NAV is current (at most STALE_DAYS before AMFI's data date),
 at its own ANCHOR T (latest NAV), with the same rules as calculation-engine/analytics (MF_Calculation_Engine.md):
+  r3m, r6m         E2 short-term returns (simple), for the 1-year rule
   r1y, r3y, r5y    E2 trailing returns: start NAV NEAREST-PREVIOUS (10-day cap); > 12 months = CAGR on actual days
   sharpe3y         E12 R1/R2: month-end returns over the last 36 completed months (min 30), σ = STDEV.S × √12,
                    Sharpe = (r3y − Rf) / σ
@@ -20,6 +21,9 @@ consistency = share of rolling windows where the fund's 3Y CAGR >= the group's m
 Per fund also its own benchmark (benchmark bucket: mapping/funds.json + prices): the benchmark's 1Y / 3Y / 5Y by E2,
 anchored at the fund's ANCHOR date (benchmark price by E1 NEAREST-PREVIOUS) — null when there is none — and the
 broad market (MARKET_CODE, NIFTY 500) on the same anchor ("market"), for the sector check of sector funds.
+Index prices can arrive a day after the NAVs. When the benchmark's latest price is older than the fund's anchor, the two
+returns would end on different days, so the entry also carries "fund": the fund's own 1Y / 3Y / 5Y at the benchmark's date.
+Every vs-benchmark comparison uses that pair.
 A figure that cannot be computed is null: never 0, never estimated. Ratios are stored as percent (12.34).
 """
 
@@ -54,7 +58,8 @@ STALE_DAYS = 7            # a scheme whose latest NAV is older than this is left
 MIN_PEERS = 5             # a median / rank needs at least this many funds in the group
 ROLLING_WINDOWS = 24      # monthly rolling 3Y windows used for consistency
 MIN_WINDOWS = 12
-METRICS = ("r1y", "r3y", "r5y", "sharpe3y", "maxDrawdown3y")
+METRICS = ("r3m", "r6m", "r1y", "r3y", "r5y", "sharpe3y", "maxDrawdown3y")
+RECENT_POINTS = 10          # latest NAVs kept with their returns, to match an index whose price arrives later
 MARKET_CODE = "OB56"      # NIFTY 500 (total return) — the broad Indian market, for the sector check
 WORKERS = 12
 
@@ -154,6 +159,8 @@ def quartile(rank: int, n: int) -> int:
 
 def fund_figures(series: Series, ends: list[date]) -> dict:
     anchor = (series.dates[-1], series.navs[-1])
+    recent = {d: [trailing(series, (d, nav), m) for m in (12, 36, 60)]
+              for d, nav in zip(series.dates[-RECENT_POINTS:], series.navs[-RECENT_POINTS:])}
     r3y = trailing(series, anchor, 36)
     deepest, worst = drawdown_3y(series, anchor)
     rolling = {}
@@ -162,9 +169,10 @@ def fund_figures(series: Series, ends: list[date]) -> dict:
         value = trailing(series, point, 36) if point else None
         if value is not None:
             rolling[end] = value
-    return {"navDate": anchor[0], "firstDate": series.dates[0], "r1y": trailing(series, anchor, 12), "r3y": r3y,
+    return {"navDate": anchor[0], "firstDate": series.dates[0], "r3m": trailing(series, anchor, 3), "r6m": trailing(series, anchor, 6),
+            "r1y": trailing(series, anchor, 12), "r3y": r3y,
             "r5y": trailing(series, anchor, 60), "sharpe3y": sharpe_3y(series, anchor, r3y),
-            "maxDrawdown3y": deepest, "worstDay3y": worst, "rolling": rolling}
+            "maxDrawdown3y": deepest, "worstDay3y": worst, "rolling": rolling, "recent": recent}
 
 
 def peer_statistics(figures: dict, group_of: dict, ends: list[date]) -> tuple[dict, dict]:
@@ -198,16 +206,17 @@ def peer_statistics(figures: dict, group_of: dict, ends: list[date]) -> tuple[di
                         out[c] = (rank, quartile(rank, len(values)), len(values))
             return out
 
-        by_return, by_sharpe = ranked("r3y"), ranked("sharpe3y")
+        by_return, by_sharpe, by_1y = ranked("r3y"), ranked("sharpe3y"), ranked("r1y")
         for c in codes:
             f = figures[c]
             windows = [(f["rolling"][e], window_median[e]) for e in ends if e in f["rolling"] and e in window_median]
             wins = sum(value >= mid for value, mid in windows)
-            r, s = by_return.get(c), by_sharpe.get(c)
+            r, s, y = by_return.get(c), by_sharpe.get(c), by_1y.get(c)
             funds[str(c)] = {
                 "group": key, "navDate": f["navDate"].isoformat(), "firstDate": f["firstDate"].isoformat(),
-                "r1y": pct(f["r1y"]), "r3y": pct(f["r3y"]), "r5y": pct(f["r5y"]), "sharpe3y": rnd(f["sharpe3y"]),
+                "r3m": pct(f["r3m"]), "r6m": pct(f["r6m"]), "r1y": pct(f["r1y"]), "r3y": pct(f["r3y"]), "r5y": pct(f["r5y"]), "sharpe3y": rnd(f["sharpe3y"]),
                 "maxDrawdown3y": pct(f["maxDrawdown3y"]), "worstDay3y": pct(f["worstDay3y"]),
+                "rank1y": y[0] if y else None, "quartile1y": y[1] if y else None, "n1y": y[2] if y else None,
                 "rank3y": r[0] if r else None, "quartile3y": r[1] if r else None, "n3y": r[2] if r else None,
                 "sharpeRank": s[0] if s else None, "sharpeQuartile": s[1] if s else None, "nSharpe": s[2] if s else None,
                 "consistency": rnd(100 * wins / len(windows), 2) if len(windows) >= MIN_WINDOWS else None,
@@ -226,7 +235,15 @@ def benchmark_figures(series: Series, fund_anchor: date) -> dict | None:
             "r3y": pct(trailing(series, anchor, 36)), "r5y": pct(trailing(series, anchor, 60))}
 
 
-def attach_benchmarks(funds: dict, mapping: dict, series_by_code: dict, market_name: str | None = None) -> int:
+def same_day_fund(figures: dict | None, index_figures: dict | None, anchor: date) -> dict:
+    """{"fund": the fund's returns at the index's date} when the index's latest price is older than the fund's anchor."""
+    if not index_figures or not figures or index_figures["anchorDate"] == anchor.isoformat():
+        return {}
+    values = figures["recent"].get(date.fromisoformat(index_figures["anchorDate"]))
+    return {"fund": dict(zip(("r1y", "r3y", "r5y"), map(pct, values)))} if values else {}
+
+
+def attach_benchmarks(funds: dict, mapping: dict, series_by_code: dict, market_name: str | None = None, figures: dict | None = None) -> int:
     """funds[code]["benchmark"] = {code, name, anchorDate, r1y, r3y, r5y} | None, and funds[code]["market"] = the
     broad market (MARKET_CODE) on the same anchor, for the sector check. Returns how many have a benchmark.
     A Pulse-made multi-index blend (benchmark_data.is_composite) is not used: benchmark None and
@@ -241,11 +258,12 @@ def attach_benchmarks(funds: dict, mapping: dict, series_by_code: dict, market_n
             entry["benchmarkExcluded"] = {"code": m["benchmarkCode"], "name": m.get("benchmarkName"), "reason": COMPOSITE_REASON}
             m = None
         series = series_by_code.get(m["benchmarkCode"]) if m else None
-        figures = benchmark_figures(series, anchor) if series else None
-        entry["benchmark"] = {"code": m["benchmarkCode"], "name": m.get("benchmarkName"), **figures} if figures else None
+        own = (figures or {}).get(int(code))
+        index_figures = benchmark_figures(series, anchor) if series else None
+        entry["benchmark"] = {"code": m["benchmarkCode"], "name": m.get("benchmarkName"), **index_figures, **same_day_fund(own, index_figures, anchor)} if index_figures else None
         market_figures = benchmark_figures(market, anchor) if market else None
-        entry["market"] = {"code": MARKET_CODE, "name": market_name, **market_figures} if market_figures else None
-        count += figures is not None
+        entry["market"] = {"code": MARKET_CODE, "name": market_name, **market_figures, **same_day_fund(own, market_figures, anchor)} if market_figures else None
+        count += index_figures is not None
     return count
 
 
@@ -313,7 +331,7 @@ def main() -> int:
 
             with ThreadPoolExecutor(max_workers=WORKERS) as pool:
                 series_by_code = {c: s for c, s in pool.map(load, [e for e in bmanifest["benchmarks"] if e["code"] in used]) if s}
-            with_benchmark = attach_benchmarks(funds, mapping, series_by_code, market_name)
+            with_benchmark = attach_benchmarks(funds, mapping, series_by_code, market_name, figures)
             if MARKET_CODE not in series_by_code:
                 warnings.append(f"broad-market index {MARKET_CODE} not in the benchmark store — sector check unavailable")
         except (StorageError, settings.SettingsError) as error:

@@ -66,7 +66,11 @@ narrowed to the scheme's fund house with `&mf=<id>&tp=1`, one calendar year per 
 checks apply and the file's metadata records the source. Example: Axis Global Equity Alpha FoF
 (MFAPI 10.77020 vs AMFI 10.8981 on 28-Dec-2020) is stored from AMFI.
 
-## Daily update — 07:00 every morning (`daily_update.py`)
+## Daily update — 07:00 and 23:30 every day (`daily_update.py`)
+
+AMFI's data date is its latest NAV date that is not after today (India time). Before a weekend or holiday a single
+overnight fund can publish a NAV dated days ahead: that row does not move the date of other funds, and it is stored
+by a run on or after that day.
 
 | Step | Detail |
 |---|---|
@@ -112,7 +116,7 @@ so `StorageClient.download` (and the server's `/api/latest-nav`) always add a un
 
 ## Website access (no key in the browser)
 
-The local server (`serve.ps1`) reads Supabase / PulseDB with the keys from `.env` and serves only:
+The website server (`server/`, Node.js; started by `serve.ps1` or `npm start`) reads Supabase / PulseDB with the keys from `.env` and serves only:
 `GET /api/latest-nav` (nav/latest.json), `GET /api/nav-history?codes=…` (`nav_api.py`: up to 80
 scheme codes, the last 5 years of daily NAVs as exact strings) and `GET /api/fund-holdings?isins=…`
 (`holdings_api.py`: each fund's latest PulseDB holdings, classified and looked through by

@@ -29,7 +29,7 @@ export const SALUTATIONS = ["Mr.", "Mrs.", "Ms."];
  */
 const PRINTED_TITLE = { MR: "Mr.", SHRI: "Mr.", MRS: "Mrs.", SMT: "Mrs.", MS: "Ms.", MISS: "Ms.", KUM: "Ms.", KUMARI: "Ms." };
 
-export function printedSalutation(portfolio) {
+function printedSalutation(portfolio) {
   return PRINTED_TITLE[portfolio.investor.title] ?? null;
 }
 

@@ -21,7 +21,7 @@ import { isValidIsin } from "../identity/isin.js";
 const FULL_BPS = 10000;
 
 /** "12.5" → 1250 basis points; null when not a valid percentage (max 2 decimals). */
-export function percentToBps(pct) {
+function percentToBps(pct) {
   const text = String(pct ?? "").trim();
   if (text === "") return 0;
   if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
