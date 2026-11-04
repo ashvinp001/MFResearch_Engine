@@ -225,6 +225,23 @@ function applyLimits(rows, ctx, config) {
   const heaviestNow = () => { const split = capNow(); return split ? Object.keys(split).sort((a, b) => (split[b] - basket[b]) - (split[a] - basket[a]))[0] : null; };
   const inHeavy = (r, heavy) => Boolean(heavy && r.cap && dominant(r.cap) === heavy);
 
+  // 1b. Small holdings (v2.2): at or below cleanupMaxPct (5%) a fund is too small to change the portfolio's result, whatever its own
+  // record, so it exits and its money is consolidated (routeMoney). Units in the ELSS lock-in and a fund awaiting the
+  // advisor's review stay, and so does the only gold / silver, debt or hybrid fund (as in the fund-count step): selling
+  // it would change the portfolio's asset mix, not only tidy it. Not when every fund is that small: there would be
+  // nothing to consolidate into.
+  const cleanup = f.cleanupMaxPct, tiny = (r) => r.weightPct <= cleanup + EPSILON;
+  if (rows.some((r) => !tiny(r))) {
+    // v2.3 (owner): the only overseas fund stays too — the client's international exposure; the box suggests adding to it.
+    const abroad = themes.find((t) => t.id === "overseas").test;
+    const onlyOfClass = (r) => (["hybrid", "debt", "goldSilver"].includes(assetOf(r)) && kept().filter((o) => assetOf(o) === assetOf(r)).length === 1)
+      || (abroad(r) && kept().filter(abroad).length === 1);
+    // Smallest first, so where one fund of a kind must stay it is the largest (the least selling and tax); then weaker first.
+    for (const r of [...rows].sort((a, b) => a.weightPct - b.weightPct || stronger(a, b))) {
+      if (!soldOut(r) && canSell(r) && tiny(r) && !onlyOfClass(r)) exit(r, { limit: "small", small: true, limitPct: cleanup });
+    }
+  }
+
   // 2. Index funds / ETFs: the best stay; all poor → all exit, and a good tracker is suggested instead. A second fund on
   // an index already held goes first, then a small holding (a large core holding is not sold to keep a stub), then one
   // from the segment furthest above the basket, then the weaker tracker.
@@ -286,11 +303,37 @@ function applyLimits(rows, ctx, config) {
     }
   }
 
+  // 3b. Categories (v2.1): the funds of a capped AMFI category (Mid Cap, Small Cap) together stay within this basket's
+  // limit, sharing it by performance — equal, or bestShare for the clearly better of two. A cut too small to make, or
+  // units that cannot be sold, stay as they are and the others take that much more, so the category still ends at its limit.
+  const categoryBefore = {};
+  for (const c of categoryGroups(basket)) {
+    const groupNow = share(kept(), c.test);
+    if (groupNow <= c.limit + EPSILON) continue;
+    categoryBefore[c.id] = groupNow;
+    const best = kept().filter(c.test).sort(stronger).reverse();
+    const clear = best.length === 2 && best[0].portfolioScore - best[1].portfolioScore >= f.clearLeadScore;
+    const room = shareOut(best, c.limit, clear, config);
+    const fixed = best.map((r, i) => !canSell(r) || now(r) - room[i] < f.minTrimPct);
+    best.forEach((r, i) => { if (fixed[i]) room[i] = now(r); });
+    let over = room.reduce((t, x) => t + x, 0) - c.limit;
+    for (let i = best.length - 1; i >= 0 && over > EPSILON; i--) {   // the weakest give up the rest first
+      if (fixed[i]) continue;
+      const take = Math.min(over, room[i]);
+      room[i] -= take; over -= take;
+    }
+    best.forEach((r, i) => { if (canSell(r) && now(r) - room[i] > EPSILON) trim(r, room[i], { limit: c.id, label: c.label, limitPct: c.limit, groupPct: groupNow }); });
+  }
+
   // Debt + arbitrage: no limit on the total (that is the risk profile's business), very few funds (2, or 1 in a small
   // portfolio), equal shares.
   // The total stays in debt: larger funds are cut only when a debt fund takes the money.
   let debtTarget = null;
-  const defensive = kept().filter(isDefensive).sort(stronger).reverse();
+  // v2.1: the STRONG funds stay first and, among them, the larger holdings (the least turnover and tax); a STRONG debt
+  // fund is not sold to keep a smaller one. The others in ranking order.
+  const strongFirst = (a, b) => ((b.graded.grade === "STRONG") - (a.graded.grade === "STRONG"))
+    || (a.graded.grade === "STRONG" && b.graded.grade === "STRONG" ? b.weightPct - a.weightPct : stronger(b, a));
+  const defensive = kept().filter(isDefensive).sort(strongFirst);
   const debtMax = range.max <= 4 ? f.debtMaxFundsSmall : f.debtMaxFunds;
   defensive.slice(debtMax).filter(canSell).forEach((r) => exit(r, { limit: "debt-count", funds: defensive.length, max: debtMax }));
   const stayed = kept().filter(isDefensive);
@@ -319,7 +362,9 @@ function applyLimits(rows, ctx, config) {
     const heaviest = heaviestNow();
     const dup = (r) => Boolean(r.behind) && list.includes(r.behind.lead);
     const overlapped = (r) => dup(r) || Boolean(r.overlapWith && list.includes(r.overlapWith));
-    const lastOfClass = (r) => ["hybrid", "debt", "goldSilver"].includes(assetOf(r)) && list.filter((o) => assetOf(o) === assetOf(r)).length === 1;
+    const abroad = themes.find((t) => t.id === "overseas").test;
+    const lastOfClass = (r) => (["hybrid", "debt", "goldSilver"].includes(assetOf(r)) && list.filter((o) => assetOf(o) === assetOf(r)).length === 1)
+      || (abroad(r) && list.filter(abroad).length === 1);
     const eligible = (r) => !r.invest && canSell(r) && !soldOut(r) && !lastOfClass(r)
       && (r.graded.grade !== "STRONG" || (r.weightPct < smallPct && dup(r)));
     const order = (r) => [r.weightPct < smallPct ? 0 : 1, overlapped(r) ? 0 : 1, heaviest && r.cap && dominant(r.cap) === heaviest ? 0 : 1, amcs.has(r.scheme?.amc) ? 0 : 1];
@@ -332,21 +377,34 @@ function applyLimits(rows, ctx, config) {
     exits.push(pick);
   }
 
-  return { kept: kept(), now, share, themes, passiveAllPoor, exits, spent, staged, split: capNow(), debtTarget, themeBefore };
+  return { kept: kept(), now, share, fundLimit: Math.max(config.investMaxWeightPct, 100 / Math.max(kept().length, 1)), passiveRoom: Math.max(0, f.passiveMaxPct - share(kept(), isEquityPassive)), themes, categories: categoryGroups(basket), passiveAllPoor, exits, spent, staged, split: capNow(), debtTarget, themeBefore, categoryBefore };
 }
 
 const dominant = (cap) => Object.keys(cap).sort((a, b) => cap[b] - cap[a])[0];
 
+/** The capped AMFI categories for this basket (config.fit.capBaskets[].categoryMaxPct): active funds of that category. */
+function categoryGroups(basket) {
+  return Object.entries(basket?.categoryMaxPct ?? {}).map(([category, limit]) => ({
+    id: `category:${category}`, category, limit, label: `${category.replace(/ Fund$/, "")} funds`,
+    test: (r) => r.scheme?.category === category && ACTIVE_ENGINES.includes(r.graded.engine),
+  }));
+}
+
+/** One fund house's limit: amcPct, or an equal share when so few funds are held that amcPct cannot hold (as for one fund). */
+export function amcLimit(list, config) {
+  return Math.max(config.flags.amcPct, 100 / Math.max(list.length, 1));
+}
+
 function overAmcs(list, now, config) {
-  const by = new Map();
+  const by = new Map(), limit = amcLimit(list, config);
   for (const r of list) if (r.scheme?.amc) by.set(r.scheme.amc, (by.get(r.scheme.amc) ?? 0) + now(r));
-  return new Map([...by].filter(([, pct]) => pct > config.flags.amcPct));
+  return new Map([...by].filter(([, pct]) => pct > limit + EPSILON));
 }
 
 /** Step 6: an INVEST that a limit stops, or a fund being cut. Returns whether anything changed. */
 function noNewMoney(rows, result, config) {
-  const { kept, now, share, themes } = result;
-  const amcs = overAmcs(kept, now, config);
+  const { kept, now, share, themes, categories } = result;
+  const amcs = overAmcs(kept, now, config), amcMax = amcLimit(kept, config);
   let changed = false;
   for (const r of rows) {
     // A limit sold a fund that led its exposure: the walk runs without it, so nothing points at it.
@@ -364,7 +422,11 @@ function noNewMoney(rows, result, config) {
       r.blocker = { ruleId: "fit-trimmed", reason: `Strong, but being reduced to its limit — no new money. ${r.graded.reason}` };
       changed = true;
     } else if (amcs.has(r.scheme?.amc)) {
-      r.blocker = { ruleId: "fit-amc-limit", reason: `Strong, but ${r.scheme.amc} is already ${amcs.get(r.scheme.amc).toFixed(1)}% of the portfolio (limit ${config.flags.amcPct}%) — no new money to this fund house. ${r.graded.reason}` };
+      r.blocker = { ruleId: "fit-amc-limit", reason: `Strong, but ${r.scheme.amc} is already ${amcs.get(r.scheme.amc).toFixed(1)}% of the portfolio (limit ${amcMax.toFixed(0)}%) — no new money to this fund house. ${r.graded.reason}` };
+      changed = true;
+    } else if (categories.find((c) => c.test(r) && share(kept, c.test) >= c.limit - EPSILON)) {
+      const c = categories.find((x) => x.test(r) && share(kept, x.test) >= x.limit - EPSILON);
+      r.blocker = { ruleId: "fit-category-limit", reason: `Strong, but ${c.label} are at their ${c.limit}% limit for this portfolio — no new money. ${r.graded.reason}` };
       changed = true;
     } else if (theme) {
       r.blocker = { ruleId: "fit-theme-limit", reason: `Strong, but ${theme.label} are at their ${theme.limit}% limit — no new money. ${r.graded.reason}` };
@@ -390,7 +452,105 @@ export function decidePortfolio(rows, { totalRupees, asOf, profile }, overlapOf,
     if (!noNewMoney(rows, result, config)) break;
   }
   const passive0 = rows.filter(isEquityPassive).length;
-  return { ...result, ctx, count0, passive0, fundsAfter: countFunds(result.kept) };
+  const routes = routeMoney(rows, result, ctx.basket, config);
+  return { ...result, routes, ctx, count0, passive0, fundsAfter: countFunds(result.kept) };
+}
+
+const RECOMMENDED = "the Prosperr Recommended Portfolio";
+
+/**
+ * v2.2: where the money from every sale goes — one plan for the whole portfolio, made after the limits are applied.
+ * A fund takes money only up to its own limits (one fund, its category, its fund house, its theme or index group), so
+ * no sale pushes another fund over a limit. In order:
+ *   1. a fund that gave way to a stronger fund that takes new money → that fund
+ *   2. gold / silver or overseas → the fund of the same kind kept, up to its group's limit (gold stays gold)
+ *   3. a small holding → the Invest fund of its own category
+ *   4. the rest → the Invest funds on the same side (equity money to equity, debt to debt): equity a step at a time to
+ *      the fund that best fills the gap to the Large / Mid / Small basket, debt to the debt fund furthest below the
+ *      others; sectoral / gold / overseas Invest funds take only their own group's money
+ *   5. what no fund can take → the Prosperr Recommended Portfolio
+ * Returns Map(row → [{ row | null (Recommended Portfolio), pct (of the portfolio) }]).
+ */
+function routeMoney(rows, plan, basket, config) {
+  const { kept, now, themes, categories, fundLimit } = plan;
+  const amcMax = amcLimit(kept, config);
+  const added = new Map();
+  const level = (r) => now(r) + (added.get(r) ?? 0);
+  const groupLevel = (test) => kept.filter(test).reduce((t, r) => t + level(r), 0);
+  const fundCapped = (r) => !["passive", "arbitrage"].includes(r.graded.engine) && assetOf(r) !== "debt";   // as step 4
+  const room = (h) => {
+    let x = fundCapped(h) ? fundLimit - level(h) : Infinity;
+    if (isEquityPassive(h)) x = Math.min(x, config.fit.passiveMaxPct - groupLevel(isEquityPassive));
+    for (const g of [...categories, ...themes]) if (g.test(h)) x = Math.min(x, g.limit - groupLevel(g.test));
+    if (h.scheme?.amc) x = Math.min(x, amcMax - groupLevel((r) => r.scheme?.amc === h.scheme.amc));
+    return Math.max(0, x);
+  };
+  // The equity split with the money routed so far, and how much a fund's holdings fill the segments below the basket.
+  const split = () => {
+    const sum = { large: 0, mid: 0, small: 0 };
+    for (const r of kept) if (r.cap) for (const k of Object.keys(sum)) sum[k] += (level(r) * r.cap[k]) / 100;
+    const total = sum.large + sum.mid + sum.small;
+    return total > 0 ? Object.fromEntries(Object.keys(sum).map((k) => [k, (sum[k] / total) * 100])) : null;
+  };
+  const fills = (h, s) => (h.cap && s ? Object.keys(s).reduce((t, k) => t + Math.max(0, basket[k] - s[k]) * h.cap[k], 0) : 0);
+  const byGap = (open) => { const s = split(); return open.sort((a, b) => fills(b, s) - fills(a, s) || stronger(b, a))[0]; };
+  const lowest = (open) => open.sort((a, b) => level(a) - level(b) || stronger(b, a))[0];
+
+  const routes = new Map();
+  const send = (row, to, pct) => {
+    const list = routes.get(row) ?? [];
+    const entry = list.find((x) => x.row === to);
+    if (entry) entry.pct += pct; else list.push({ row: to, pct });
+    routes.set(row, list);
+    if (to) added.set(to, (added.get(to) ?? 0) + pct);
+  };
+  const STEP = 0.25;   // % of the portfolio placed at a time, so the gap is re-read as the money arrives
+  const pour = (row, amount, homes, pick) => {
+    let left = amount;
+    while (left > EPSILON) {
+      const open = homes.filter((h) => room(h) > EPSILON);
+      if (!open.length) break;
+      const h = pick(open);
+      const take = Math.min(left, room(h), STEP);
+      send(row, h, take);
+      left -= take;
+    }
+    return left;
+  };
+
+  const trimmed = (r) => r.trimTo !== null && r.trimTo !== undefined;
+  const leaving = (r) => (kept.includes(r) ? (trimmed(r) ? r.weightPct - r.trimTo : 0) : r.weightPct);
+  const left = new Map(rows.map((r) => [r, leaving(r)]).filter(([, x]) => x > EPSILON));
+  const invest = kept.filter((r) => r.invest);
+  const step = (homesOf, pick) => {
+    for (const [row, amount] of left) {
+      const homes = homesOf(row);
+      if (homes.length && amount > EPSILON) left.set(row, pour(row, amount, homes, pick));
+    }
+  };
+  step((row) => (row.behind?.lead.invest && invest.includes(row.behind.lead) ? [row.behind.lead] : []), lowest);
+  step((row) => (["commodity", "overseas"].includes(row.graded.engine)
+    ? kept.filter((o) => o !== row && o.graded.engine === row.graded.engine && !trimmed(o)) : []), lowest);
+  step((row) => (row.fitExit?.limit === "small"
+    ? invest.filter((o) => o.scheme && row.scheme && o.scheme.category === row.scheme.category && ACTIVE_ENGINES.includes(o.graded.engine) && ACTIVE_ENGINES.includes(row.graded.engine)) : []), byGap);
+  for (const [row, amount] of left) {
+    if (amount <= EPSILON) continue;
+    const side = isDefensive(row);
+    const satellite = (h) => themes.some((t) => t.test(h) && !t.test(row));
+    const homes = invest.filter((h) => isDefensive(h) === side && !satellite(h));
+    const rest = pour(row, amount, homes, side ? lowest : byGap);
+    if (rest > EPSILON) send(row, null, rest);
+  }
+  return routes;
+}
+
+/** Where a fund's money goes, in words: one fund, or each part as a share of the money. */
+function moveText(parts) {
+  const total = parts.reduce((t, p) => t + p.pct, 0);
+  const named = [...parts].sort((a, b) => (!a.row - !b.row) || b.pct - a.pct);
+  if (named.length === 1) return named[0].row ? fundLabel(named[0].row) : RECOMMENDED;
+  const words = named.map((p) => `${p.row ? fundLabel(p.row) : RECOMMENDED} (about ${Math.max(1, Math.round((p.pct / total) * 100))}%)`);
+  return `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
 }
 
 /** Two funds that share their stocks with neither one leading: the weaker is first in line in a consolidation. */
@@ -404,17 +564,18 @@ function markHeldOverlaps(rows, overlapOf, config) {
 }
 
 /**
- * Where the money from a sale goes: the fund it gave way to, else an INVEST fund on the same side of the portfolio —
- * equity money to equity funds, debt money to debt funds, so a sale never changes the portfolio's risk on its own —
- * else the Prosperr Recommended Portfolio. Debt money goes to the debt fund furthest below its equal share.
+ * Where the money from a sale goes (routeMoney): the text and the parts. A fund whose units cannot be sold now (the
+ * ELSS lock-in) has no money to route: it is pointed at the Invest funds of its side, for when it can be sold.
  */
-function destination(row, rows) {
-  if (row.behind?.lead.invest) return fundLabel(row.behind.lead);
-  const side = isDefensive(row);
-  const homes = rows.filter((r) => r.invest && isDefensive(r) === side);
-  if (!homes.length) return "the Prosperr Recommended Portfolio";
-  if (side || homes.length === 1) return fundLabel(homes.sort((a, b) => (a.trimTo ?? a.weightPct) - (b.trimTo ?? b.weightPct))[0]);
-  return homes.length === rows.filter((r) => r.invest).length ? "the Invest funds" : "the equity funds marked Invest";
+function destination(row, rows, plan) {
+  const parts = plan.routes?.get(row);
+  if (parts?.length) {
+    const total = parts.reduce((t, p) => t + p.pct, 0);
+    return { text: moveText(parts), split: parts.map((p) => ({ to: p.row ? fundLabel(p.row) : RECOMMENDED, pct: p.pct, share: p.pct / total })) };
+  }
+  if (row.behind?.lead.invest) return { text: fundLabel(row.behind.lead), split: null };
+  const homes = rows.filter((r) => r.invest && isDefensive(r) === isDefensive(row));
+  return { text: homes.length === 1 ? fundLabel(homes[0]) : homes.length ? "the funds marked Invest" : RECOMMENDED, split: null };
 }
 
 function limitText(facts, count0, range, passive0, passiveMax) {
@@ -435,14 +596,20 @@ export function fundCall(fund, rows, plan, config) {
   const { graded, behind } = fund;
   const { ctx, count0, passive0 } = plan;
   const { range, passiveMax } = ctx;
-  const to = destination(fund, rows);
+  const { text: to, split: moveSplit } = destination(fund, rows, plan);
+  if (fund.fitExit?.limit === "small") {
+    // v2.2: a clean-up, not a view on the fund — said plainly when the fund's own record is good.
+    const good = graded.grade === "STRONG" ? " The fund's own record is good: this exit only consolidates the portfolio and is not a view on the fund." : "";
+    return { status: "sell", ruleId: "fit-small", move: to, moveSplit,
+      reason: `Portfolio clean-up — at ${fund.weightPct.toFixed(1)}% of the portfolio this holding is at or below ${fund.fitExit.limitPct}%, too small to make a difference to the portfolio; exit and consolidate the money into ${to}.${good} On its own: ${graded.reason}` };
+  }
   if (fund.fitExit) {
     const facts = fund.fitExit, why = [];
     if (facts.small) why.push(`a small holding (${fund.weightPct.toFixed(1)}% of the portfolio)`);
     if (facts.dup) why.push(`${fundLabel(facts.sameIndexAs ?? behind.lead)} already covers the same ${facts.sameIndexAs ? "index" : behind.kind}`);
     else if (facts.overlapped) why.push(`it shares its stocks with ${fundLabel(fund.overlapWith)}, the stronger of the two`);
     if (facts.heavy) why.push(`${facts.heavy} caps are above this portfolio's ${ctx.basket.label} reference mix`);
-    if (facts.amc) why.push(`${fund.scheme.amc} is above ${config.flags.amcPct}% of the portfolio`);
+    if (facts.amc) why.push(`${fund.scheme.amc} is above ${amcLimit(plan.kept, config).toFixed(0)}% of the portfolio`);
     // Another fund still held gives the same gold / silver / overseas exposure.
     const same = ["commodity", "overseas"].includes(graded.engine) ? plan.kept.find((o) => o !== fund && o.graded.engine === graded.engine) : null;
     if (same) why.push(`${fundLabel(same)} already gives the ${graded.engine === "commodity" ? "gold / silver" : "overseas"} exposure`);
@@ -452,23 +619,23 @@ export function fundCall(fund, rows, plan, config) {
       const measured = isNum(graded.excess?.e3) || isNum(graded.benchmarkExcess?.b3);
       why.push(measured ? "among the weakest of the funds held" : `not compared with peers (${fund.weightPct.toFixed(1)}% of the portfolio), so it is the easiest to do without`);
     }
-    return { status: "sell", ruleId: "fit-exit", move: to,
+    return { status: "sell", ruleId: "fit-exit", move: to, moveSplit,
       reason: `Portfolio fit — ${limitText(facts, count0, range, passive0, passiveMax)}. This fund: ${why.join("; ")} — exit and move the money to ${to}. On its own: ${graded.reason}` };
   }
   if (fund.fundSell === "weakest-in-category") {
-    return { status: "sell", ruleId: "weakest-in-category", move: to, stage: "fund",
+    return { status: "sell", ruleId: "weakest-in-category", move: to, moveSplit, stage: "fund",
       reason: `Same category as ${fundLabel(behind.lead)}, and clearly behind both its category median and its benchmark, with no strength to set against that — consolidate into ${to}.` };
   }
   if (fund.fundSell === "overlap-weaker") {
     const { aWins, bWins, n } = compareFunds(behind.lead, fund);
-    return { status: "sell", ruleId: "overlap-weaker", move: to,
+    return { status: "sell", ruleId: "overlap-weaker", move: to, moveSplit,
       reason: `${Math.round(behind.overlap)}% of its equity holdings are the same stocks as ${fundLabel(behind.lead)}, which takes the new money and is better on ${Math.max(aWins, bWins)} of ${n} measures — consolidate into ${to}.` };
   }
-  if (graded.grade === "WEAK") return { status: "sell", ruleId: graded.ruleId, reason: graded.reason, move: to };
+  if (graded.grade === "WEAK") return { status: "sell", ruleId: graded.ruleId, reason: graded.reason, move: to, moveSplit };
   if (fund.trimTo !== null && fund.trimTo !== undefined) {
     const cut = fund.weightPct - fund.trimTo;
     const why = fund.trimFacts.map((facts) => limitText(facts, count0, range, passive0, passiveMax)).join("; ");
-    return { status: "sell", ruleId: "fit-trim", move: to, trim: { fromPct: fund.weightPct, toPct: fund.trimTo, cutPct: cut },
+    return { status: "sell", ruleId: "fit-trim", move: to, moveSplit, trim: { fromPct: fund.weightPct, toPct: fund.trimTo, cutPct: cut },
       reason: `Portfolio fit — ${why}. Reduce this fund from ${fund.weightPct.toFixed(1)}% to ${fund.trimTo.toFixed(1)}% of the portfolio and move the money to ${to}; the rest stays invested. On its own: ${graded.reason}` };
   }
   if (fund.invest) return { status: "invest", ruleId: graded.ruleId, reason: graded.reason };
@@ -540,6 +707,12 @@ export function suggestionBox(rows, plan, { totalRupees, pick, overlapOf }, conf
         : plan.staged ? ` Further consolidation is staged over later reviews: exits made only to reduce the number of funds are kept to ${config.fit.reviewSellMaxPct}% of the portfolio per review.`
           : " The other funds stay for now: they take new money, are the only fund of their kind, or have units in the ELSS lock-in.") });
   }
+  // v2.2: the small holdings exited to tidy the portfolio, whatever their record.
+  const smalls = rows.filter((r) => r.fitExit?.limit === "small");
+  if (smalls.length) {
+    const pct = smalls.reduce((t, r) => t + r.weightPct, 0);
+    out.push({ id: "small", text: `${smalls.length === 1 ? `${fundLabel(smalls[0])} is` : `${smalls.length} funds are`} at or below ${config.fit.cleanupMaxPct}% of the portfolio each (${pct.toFixed(1)}% together, about ${inr((totalRupees * pct) / 100)}): too small to make a difference, so ${smalls.length === 1 ? "it is" : "they are"} exited to consolidate the portfolio, even where the fund's own record is good. The money goes to a fund of the same category where one is marked Invest and has room, otherwise to the fund that best fills the portfolio's gap.` });
+  }
   if (passiveAllPoor) {
     const amount = (totalRupees * config.fit.passiveSuggestPct) / 100;
     out.push({ id: "passive", text: `Every index fund / ETF held trails its index beyond the tracking limit, so we recommend exiting them${pick ? ` and placing ${config.fit.passiveSuggestPct}% of the portfolio (about ${inr(amount)}) in ${pick.name}, which has tracked ${pick.index} best over 1, 3 and 5 years` : ""}.` });
@@ -567,7 +740,18 @@ export function suggestionBox(rows, plan, { totalRupees, pick, overlapOf }, conf
     out.push({ id: "debt", text: `The debt and arbitrage funds should be equal, at about ${debtEqual.toFixed(1)}% each; no change is made now because none of them is taking new money.` });
   }
   for (const [amc, pct] of overAmcs(kept, now, config)) {
-    out.push({ id: "amc", text: `${pct.toFixed(1)}% of the portfolio is with one fund house (${amc}), above ${config.flags.amcPct}% — new investments should go to other fund houses.` });
+    out.push({ id: "amc", text: `${pct.toFixed(1)}% of the portfolio is with one fund house (${amc}), above ${amcLimit(kept, config).toFixed(0)}% — new investments should go to other fund houses.` });
+  }
+  for (const c of plan.categories ?? []) {
+    const after = share(kept, c.test), before = plan.categoryBefore?.[c.id];
+    const what = `${c.label[0].toUpperCase()}${c.label.slice(1)}`;
+    if (before && after <= c.limit + EPSILON) out.push({ id: "category", text: `${what} were ${before.toFixed(1)}% of the portfolio, above the ${c.limit}% that suits its ${ctx.basket.label} mix; they are brought to ${after.toFixed(1)}%, shared by performance.` });
+    else if (after > c.limit + EPSILON) {
+      // Why it stays above: a fund that needs the advisor's review is never sold automatically; others are locked units or cuts too small to make.
+      const review = kept.filter((r) => c.test(r) && r.graded.grade === "REVIEW");
+      const why = review.length ? `${review.map(fundLabel).join(", ")} ${review.length > 1 ? "need" : "needs"} your review (too little history to rate), so ${review.length > 1 ? "they are" : "it is"} not reduced automatically` : "the rest cannot be reduced in this review";
+      out.push({ id: "category", text: `${after.toFixed(1)}% of the portfolio stays in ${c.label}, above the ${c.limit}% that suits its ${ctx.basket.label} mix: ${why} — no new money into them.` });
+    }
   }
   for (const t of themes) {
     const after = share(kept, t.test);
@@ -589,6 +773,33 @@ export function suggestionBox(rows, plan, { totalRupees, pick, overlapOf }, conf
   if (split) {
     const { basket } = plan.ctx;
     out.push({ id: "cap", text: `For this portfolio's risk profile and horizon, the ${basket.label} mix of Large ${basket.large}%, Mid ${basket.mid}%, Small ${basket.small}% is the reference. After these changes, equity is split Large ${split.large.toFixed(0)}%, Mid ${split.mid.toFixed(0)}%, Small ${split.small.toFixed(0)}%, before the proceeds are reinvested.` });
+    // v2.1: where new money should go first — the segment furthest below the basket (10 points or more), filled through
+    // the diversified INVEST fund (not a sector / gold / overseas fund) with most of that segment and room under its limit.
+    const [seg, gap] = ["large", "mid", "small"].map((k) => [k, basket[k] - split[k]]).sort((a, b) => b[1] - a[1])[0];
+    if (gap >= 10) {
+      const satellite = (r) => themes.some((t) => t.test(r));
+      const best = kept.filter((r) => r.invest && !isDefensive(r) && !satellite(r) && r.cap && r.cap[seg] >= 40 && now(r) < plan.fundLimit - EPSILON)
+        .sort((a, b) => b.cap[seg] - a.cap[seg])[0];
+      out.push({ id: "cap", text: best
+        ? `${seg[0].toUpperCase()}${seg.slice(1)} caps are ${gap.toFixed(0)} points below the ${basket.label} mix; direct new money and the proceeds first to ${fundLabel(best)}, about ${best.cap[seg].toFixed(0)}% of which is in ${seg} caps.`
+        : `${seg[0].toUpperCase()}${seg.slice(1)} caps are ${gap.toFixed(0)} points below the ${basket.label} mix and no fund kept fills that gap; add a ${seg} cap fund through the Prosperr Recommended Portfolio.` });
+    }
+  }
+  // v2.3 (owner): the only overseas fund is kept however small, and new money is suggested for it, up to overseasSuggestPct.
+  const abroad = themes.find((t) => t.id === "overseas");
+  const overseasKept = kept.filter(abroad.test);
+  const target = config.fit.overseasSuggestPct;
+  if (overseasKept.length === 1 && now(overseasKept[0]) < target - EPSILON) {
+    const r = overseasKept[0], add = target - now(r);
+    out.push({ id: "overseas", text: `${fundLabel(r)} is the portfolio's only overseas fund, at ${now(r).toFixed(1)}%: it is kept for its international diversification, and we suggest adding about ${inr((totalRupees * add) / 100)} of new money to it over time, to bring it to about ${target}% of the portfolio.` });
+  }
+  // v2.2: where all the money from this review's sales goes, after every limit — each fund only up to its room.
+  const into = new Map();
+  for (const parts of plan.routes?.values() ?? []) for (const p of parts) into.set(p.row, (into.get(p.row) ?? 0) + p.pct);
+  if (into.size) {
+    const named = [...into].sort(([a, x], [b, y]) => (!a - !b) || y - x)
+      .map(([r, pct]) => `${r ? fundLabel(r) : RECOMMENDED} about ${inr((totalRupees * pct) / 100)} (${pct.toFixed(1)}% of the portfolio)`);
+    out.push({ id: "proceeds", text: `Where the money from these sales goes, with every fund kept within its limits: ${named.join("; ")}.` });
   }
   for (const r of rows.filter((x) => x.members.length > 1)) {
     const plans = new Set(r.members.map((m) => m.scheme?.plan));

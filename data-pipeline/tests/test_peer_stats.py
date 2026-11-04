@@ -150,6 +150,14 @@ class ShortTermTests(unittest.TestCase):
         self.assertIsNotNone(f["r6m"])
         self.assertLess(f["r3m"], f["r6m"])
 
+    def test_return_since_launch_only_for_a_fund_under_a_year(self):
+        from peer_stats import fund_figures as figures_of
+        ends = month_ends(last_completed_month_end(T), 24)
+        young = figures_of(growth_series(0.5, start=T - timedelta(days=200)), ends)
+        self.assertAlmostEqual(young["rLaunch"], 1.5 ** (200 / 365) - 1, places=9)   # absolute, from the first NAV
+        self.assertIsNone(young["r1y"])
+        self.assertIsNone(figures_of(growth_series(0.12), ends)["rLaunch"])   # a year or more: not published
+
 
 class PeerTests(unittest.TestCase):
     ENDS = month_ends(last_completed_month_end(T), 24)

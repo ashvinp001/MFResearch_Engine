@@ -60,7 +60,7 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
       // The logic's basis for its call (grade, stage) — used by the commentary only when the advisor kept that call.
       call: (() => {
         const s = calls[holdingKey(holding)];
-        return s && s.verdict && s.verdict === verdicts[holdingKey(holding)] ? { grade: s.grade, ruleId: s.ruleId ?? null, stage: s.stage ?? "fund", trim: s.trim ?? null, move: s.move ?? null } : null;
+        return s && s.verdict && s.verdict === verdicts[holdingKey(holding)] ? { grade: s.grade, ruleId: s.ruleId ?? null, stage: s.stage ?? "fund", trim: s.trim ?? null, move: s.move ?? null, moveSplit: s.moveSplit ?? null, fundWeightPct: s.fundWeightPct ?? null } : null;
       })(),
       // AMFI class / category / name first; a fund of funds or solution fund the name cannot place goes by its
       // look-through holdings (65% rule). Anything still unplaced is shown under "OTHER", never under another heading.

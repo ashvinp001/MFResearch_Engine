@@ -187,6 +187,13 @@ export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
     if (precious) {
       return `${row.name} continues to serve its purpose as a gold / silver allocation${typeof r1 === "number" ? ` (1Y ${pct1(r1)})` : ""}, adding stability and diversification; an equity index is not its benchmark. We recommend holding the current position.`;
     }
+    // v2.3: a small fund whose rating is pending, held on its last year.
+    if (call.ruleId === "young-1y-in-line") {
+      return `${lead}with less than three years of record its rating is still pending, but over the last year it is in line with or ahead of its peers, so we recommend holding the current position, with fresh investment directed to the funds marked Invest.`;
+    }
+    if (call.ruleId === "young-new-in-line") {
+      return `${row.name} was launched less than a year ago and has done well since launch, so we recommend holding the current position while its record builds, with fresh investment directed to the funds marked Invest.`;
+    }
     return hasData
       ? `${lead}we recommend holding the current position, with fresh investment directed to the funds marked Invest.`
       : `We recommend holding ${row.name} at its current position, with fresh investment directed to the funds marked Invest.`;
@@ -195,8 +202,18 @@ export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
     // Each claim only when it is the actual basis of the call: a portfolio-fit exit is about consolidation, and
     // "trails its peers" is said only of a fund the logic graded weak on its longer-term record.
     const fallback = hasRecommended ? "the Prosperr Recommended Portfolio" : "the funds marked Invest";
-    const named = call.move && !/^the /.test(call.move) ? call.move : null;   // a specific fund the logic chose
+    // A specific fund (or funds, each with its share of the money) the logic chose; the Recommended Portfolio is named
+    // only when it is part of this report.
+    const chosen = call.move && !/^the /.test(call.move) ? call.move : null;
+    const named = chosen && !hasRecommended ? chosen.replace(/the Prosperr Recommended Portfolio/g, "the funds marked Invest") : chosen;
     const redeploy = named ?? fallback;
+    const oneFund = named && !(call.moveSplit?.length > 1) ? named : null;
+    if (call.ruleId === "fit-small") {
+      // v2.2: a clean-up, not a view on the fund — the record is stated, then why it goes.
+      const good = call.grade === "STRONG" ? " The fund itself has a good record; this is only to tidy and consolidate the portfolio, not a view on the fund." : "";
+      const size = typeof call.fundWeightPct === "number" ? ` at ${call.fundWeightPct.toFixed(1)}% of the portfolio` : "";
+      return `${lead}${hasData ? "however, " : ""}${size ? `${size.trim()} it` : "it"} is too small a holding to make a difference to the portfolio's results.${good} We recommend exiting it and consolidating the proceeds into ${redeploy}.`;
+    }
     if (call.trim) {
       return `${lead}it stays in the portfolio, but we recommend reducing it from ${call.trim.fromPct.toFixed(1)}% to ${call.trim.toPct.toFixed(1)}% of the portfolio (see the Suggestion Box), releasing about ${formatRupees(call.trim.amount)} for ${redeploy}.`;
     }
@@ -204,7 +221,13 @@ export function fundCommentary(row, verdict, { hasRecommended = true } = {}) {
       return `${lead}we recommend exiting it to consolidate the portfolio into fewer, stronger funds (see the Suggestion Box) and redeploying the proceeds into ${redeploy}.`;
     }
     if (call.ruleId === "overlap-weaker" || call.ruleId === "weakest-in-category") {
-      return `${lead}it largely duplicates ${named ?? "a stronger fund held in the portfolio"}${call.ruleId === "overlap-weaker" ? ", holding many of the same stocks" : " in the same category"}, which has the better record. We recommend consolidating into ${redeploy}.`;
+      return `${lead}it largely duplicates ${oneFund ?? "a stronger fund held in the portfolio"}${call.ruleId === "overlap-weaker" ? ", holding many of the same stocks" : " in the same category"}, which has the better record. We recommend consolidating into ${redeploy}.`;
+    }
+    if (call.ruleId === "young-1y-behind") {
+      return `${lead}with less than three years of record its rating is still pending, and over the last year it is behind its peers. We recommend exiting and redeploying the proceeds into ${redeploy}.`;
+    }
+    if (call.ruleId === "young-new-behind") {
+      return `${row.name} was launched less than a year ago and has not yet delivered the return we look for since launch. We recommend exiting and redeploying the proceeds into ${redeploy}.`;
     }
     if (call.ruleId === "young-1y-no-recovery") {
       return `${lead}with less than three years of record, it ranks in the bottom quarter of its category over the past year and has not recovered over the last three to six months. We recommend exiting and redeploying the proceeds into ${redeploy}.`;

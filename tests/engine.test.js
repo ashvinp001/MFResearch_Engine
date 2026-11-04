@@ -29,6 +29,7 @@ import { isNotHeld } from "../calculation-engine/cas/normalize.js";
 import { fundCommentary } from "../app/portfolio-analyzer/reports/detailed-copy.js";
 import { samplePortfolio, SAMPLE_FUND_DATA } from "./sample-snapshot.js";
 import { capBasket } from "../calculation-engine/portfolio-analyzer/portfolio-fit.js";
+import { gradeYoungSmall } from "../calculation-engine/portfolio-analyzer/fund-grading.js";
 import { RECOMMENDATION } from "../calculation-engine/config.js";
 
 const SHIPPED_LISTS = await Promise.all(["regular", "direct", "etf"].map(async (f) => (await fetch(`../data/schemes/${f}.json`)).json()));
@@ -948,7 +949,7 @@ const recGrade = (category, over = {}, { scheme, credit = null, median } = {}) =
   gradeFund({ scheme: recScheme(1, category, scheme), name: "", stats: recStats(over), group: recGroup(median), statsAsOf: REC_AS_OF, credit });
 
 /** funds: [{ isin, value, scheme, stats?, group?, units?, txns? }] → autoRecommend result. */
-function recPortfolio(funds, { fundHoldings = null } = {}) {
+function recPortfolio(funds, { fundHoldings = null, profile = null } = {}) {
   const portfolio = createPortfolio("CAMS_KFINTECH", "t.pdf");
   const schemes = {}, peerFunds = {}, groups = {};
   funds.forEach((f, i) => {
@@ -965,7 +966,7 @@ function recPortfolio(funds, { fundHoldings = null } = {}) {
       groups[key] = f.group ?? recGroup();
     }
   });
-  const result = autoRecommend({ portfolio, schemes, peerStats: { asOf: REC_AS_OF, funds: peerFunds, groups }, fundHoldings });
+  const result = autoRecommend({ portfolio, schemes, peerStats: { asOf: REC_AS_OF, funds: peerFunds, groups }, fundHoldings, ...(profile ? { profile } : {}) });
   const by = (i) => result.suggestions[holdingKey(portfolio.holdings[i])];
   return { result, by };
 }
@@ -1279,17 +1280,22 @@ test("Auto: arbitrage judged on return and rank only; Regular plan note; fund-ho
     { isin: "B", value: "50,000.00", scheme: recScheme(2, "Mid Cap Fund", { amc: "Same AMC" }), stats: recStats() }]);
   eq(by(0).notes.some((n) => /regular plan|direct plan/i.test(n)), false);   // both plans are recommended: no switch note
   eq(result.flags.some((f) => f.id === "amc"), true);
-  eq(result.flags.filter((f) => f.id === "fund").length, 2);   // both active funds are 50%
+  // v2.1: the Mid Cap fund is cut to the Balanced basket's 25% Mid Cap limit; the Flexi Cap fund is already at its
+  // two-fund equal share, so the money goes to the Recommended Portfolio rather than pushing it to 75%.
+  eq([by(1).status, by(1).trim.toPct, by(1).move], ["sell", 25, "the Prosperr Recommended Portfolio"]);
+  eq(result.flags.filter((f) => f.id === "fund").length, 1);   // the Flexi Cap fund at 50%; the Mid Cap fund has its own cut line
+  eq(result.flags.some((f) => f.id === "category"), true);
   const etf = recPortfolio([{ isin: "E", value: "60,000.00", scheme: recScheme(5, "Other ETFs", { plan: "ETF", assetClass: "Other" }), stats: recStats() },
     { isin: "F", value: "40,000.00", scheme: recScheme(6, "Mid Cap Fund"), stats: recStats() }]).result;
-  eq(etf.flags.filter((f) => f.id === "fund").map((f) => f.text.startsWith("Fund 6")), [true]);   // the ETF is not flagged
+  eq(etf.flags.filter((f) => f.id === "fund").some((f) => f.text.startsWith("Fund 5")), false);   // the ETF is not flagged
+  eq(etf.flags.some((f) => f.id === "category" && /Mid Cap funds were 40\.0%/.test(f.text)), true);   // v2.1: the Mid Cap fund is cut to its category limit
 });
 
 // ---------- Stage 2b: portfolio fit (v1.4) ----------
 const strong = (code, category, value, extra = {}) => ({ isin: `S${code}`, value, scheme: recScheme(code, category, extra), stats: recStats() });
 const mixed = (code, category, value, over = {}, extra = {}) => ({ isin: `M${code}`, value, scheme: recScheme(code, category, extra), stats: recStats({ ...IN_LINE, ...over }) });
 const indexHold = (code, value) => ({ isin: `I${code}`, value, scheme: recScheme(code, "Index Funds", { assetClass: "Other" }), stats: recStats() });   // no benchmark → HOLD
-const exitsOf = (result) => Object.values(result.suggestions).filter((s) => s.ruleId === "fit-exit");
+const exitsOf = (result) => Object.values(result.suggestions).filter((s) => s.ruleId === "fit-exit" || s.ruleId === "fit-small");
 
 test("Fit P1: more funds than the portfolio's ideal range → the small, then the weakest Hold funds exit; no more than needed", () => {
   // ₹1L portfolio → ideal 2–4 funds; small = below 100 / 4 × 0.25 = 6.25%
@@ -1298,13 +1304,15 @@ test("Fit P1: more funds than the portfolio's ideal range → the small, then th
     mixed(4, "Flexi Cap Fund", "20000.00"),
     mixed(5, "Value Fund", "5000.00"),
     mixed(6, "Focused Fund", "15000.00", { r3y: 14.5, r5y: 13.5 })]);
-  eq([by(0).status, by(1).status, by(2).status], ["invest", "invest", "invest"]);
-  eq([by(4).status, by(4).ruleId, by(4).stage], ["sell", "fit-exit", "portfolio"]);
-  eq(by(4).reason.includes("small holding (5.0% of the portfolio)"), true);
-  eq(by(4).reason.includes("holds 6 funds where 2–4 suit its size"), true);
+  eq([by(0).status, by(1).status], ["invest", "invest"]);
+  eq([by(2).status, by(2).ruleId, by(2).trim.toPct], ["sell", "fit-trim", 15]);   // v2.1: Small Cap funds at most 15% (Balanced)
+  // v2.2: below 6.25% a holding is cleaned up whatever its record; the fund count then exits the weakest Hold.
+  eq([by(4).status, by(4).ruleId, by(4).stage], ["sell", "fit-small", "portfolio"]);
+  eq(by(4).reason.includes("at 5.0% of the portfolio this holding is at or below 5%"), true);   // equal to 5% counts
+  eq(by(5).reason.includes("holds 6 funds where 2–4 suit its size"), true);
   eq(by(5).reason.includes("among the weakest of the funds held"), true);   // measured: 3Y / 5Y behind the others
   eq([by(5).status, by(3).status, by(3).ruleId], ["sell", "hold", "mixed"]);   // 2 exits bring 6 → 4; the stronger Hold stays
-  eq([result.fit.funds, result.fit.fundsAfter, result.fit.exits, result.fit.open], [6, 4, 2, []]);
+  eq([result.fit.funds, result.fit.fundsAfter, result.fit.exits, result.fit.open], [6, 4, 1, []]);   // the small holding is a clean-up, not a fund-count exit
   eq(result.flags.some((f) => f.id === "count"), true);
 });
 
@@ -1317,12 +1325,12 @@ test("Fit P2: protections — category leader, last gold fund, ELSS in lock-in a
     { ...mixed(7, "ELSS (Tax Saver)", "3000.00"), units: "100.000", txns: [tx("2025-03-10", 100)] },
     mixed(8, "Large Cap Fund", "4000.00")]);
   eq([by(5).status, by(6).status], ["hold", "hold"]);   // last gold / silver fund; ELSS units locked
-  eq([by(7).status, by(7).ruleId], ["sell", "fit-exit"]);
-  eq(by(7).reason.includes("Fund 1 (Direct) already covers the same category"), true);
-  eq(by(7).reason.includes("move the money to Fund 1 (Direct)"), true);
+  eq([by(7).status, by(7).ruleId], ["sell", "fit-small"]);   // v2.2: 4.2%, below 6.25% — cleaned up into the same category
+  // Fund 1 (17.9%) takes only what fits under the 20% one-fund limit; the rest fills the gap through the other Invest funds.
+  eq([by(7).moveSplit[0].to, by(7).moveSplit[0].pct.toFixed(1), by(7).reason.includes("consolidate the money into Fund 1 (Direct) (about")], ["Fund 1 (Direct)", "2.1", true]);
   eq(by(0).status, "invest");                           // the category leader is kept
   // Not enough candidates: the job stops honestly — still above the range, no other fund forced out
-  eq([result.fit.exits, result.fit.fundsAfter, result.fit.open.includes("count")], [1, 7, true]);
+  eq([result.fit.exits, result.fit.fundsAfter, result.fit.open.includes("count")], [0, 7, true]);   // the small duplicate is a clean-up, not a fund-count exit
 });
 
 test("Fit P2b: two gold funds over the fund count → one exits, named as duplicate exposure; never called 'weakest' unmeasured", () => {
@@ -1351,7 +1359,7 @@ test("Fit P4: index funds and fund count together — extras exit first, then th
   const exits = exitsOf(result);
   eq([exits.length, result.fit.fundsAfter, result.fit.open], [3, 4, []]);
   eq(exits.filter((s) => s.engine === "passive").length, 2);
-  eq(exits.some((s) => s.reason.includes("small holding")), true);
+  eq(exits.some((s) => s.ruleId === "fit-small" && s.reason.includes("this holding is at or below 5%")), true);
 });
 
 test("Fit P5: theme above its limit is cut to the limit, weakest first, and takes no new money", () => {
@@ -1372,9 +1380,9 @@ test("Fit P6: a fund house above 40% → its INVEST calls become HOLD (no new mo
   const { by, result } = recPortfolio([   // ₹30L → ideal 4–8; 6 funds
     strong(1, "Large Cap Fund", "600000.00", x), strong(2, "Mid Cap Fund", "600000.00", x), strong(3, "Small Cap Fund", "150000.00", x),
     strong(4, "Flexi Cap Fund", "600000.00"), strong(5, "Value Fund", "600000.00"), strong(6, "Focused Fund", "450000.00")]);
-  eq([by(0).ruleId, by(1).ruleId, by(2).ruleId].every((r) => r === "fit-amc-limit"), true);
+  eq([by(0).ruleId, by(1).ruleId, by(2).ruleId], ["fit-amc-limit", "fit-amc-limit", "fit-small"]);   // Fund 3 is exactly 5%: cleaned up (v2.2)
   eq([by(0).status, by(3).status, by(5).status], ["hold", "invest", "invest"]);
-  eq([exitsOf(result).length, result.fit.range], [0, { min: 4, max: 8, band: "₹25L–₹1Cr" }]);
+  eq([exitsOf(result).length, result.fit.range], [1, { min: 4, max: 8, band: "₹25L–₹1Cr" }]);   // only the 5% clean-up
   eq(result.flags.filter((f) => f.id === "amc").length, 1);
 });
 
@@ -1393,6 +1401,122 @@ test("Fit P8: Suggestion Box — folios, both plans, overlap pairs; written with
   const folios = result.flags.filter((f) => f.id === "folios");
   eq([folios.length, /2 folios/.test(folios[0].text), /no sale is needed/.test(folios[0].text)], [1, true, true]);
   eq(result.flags.every((f) => !/\bwe sold\b|you changed/i.test(f.text)), true);
+});
+
+test("Fit v2.1 C1: Mid / Small Cap funds together stay within the basket's limit, shared equally when alike", () => {
+  // ₹10L, 5 funds, no profile → Balanced: Small Cap ≤ 15%, Mid Cap ≤ 25%. Two alike Small Cap funds at 12% each = 24%.
+  const { by, result } = recPortfolio([strong(1, "Large Cap Fund", "300000.00"), strong(2, "Flexi Cap Fund", "260000.00"),
+    strong(3, "Small Cap Fund", "120000.00"), strong(4, "Small Cap Fund", "120000.00", { amc: "AMC 3" }), strong(5, "Mid Cap Fund", "200000.00")]);
+  eq([by(2).status, by(2).trim.toPct, by(3).status, by(3).trim.toPct], ["sell", 7.5, "sell", 7.5]);   // 15% shared 7.5 / 7.5
+  eq(by(4).status === "sell", false);   // Mid Cap 20% is within its 25% limit
+  eq(result.flags.some((f) => f.id === "category" && /Small Cap funds were 24\.0%/.test(f.text) && /Balanced/.test(f.text)), true);
+});
+
+test("Fit v2.1 C2: the basket sets the limit — Conservative Small Cap 10%, Growth 20%", () => {
+  const funds = () => [strong(1, "Large Cap Fund", "450000.00"), strong(2, "Flexi Cap Fund", "250000.00"), strong(3, "Small Cap Fund", "180000.00"),
+    strong(4, "Value Fund", "120000.00")];
+  const conservative = recPortfolio(funds(), { profile: { risk: { label: "Conservative" }, horizon: { label: "Long Term" } } });
+  const growth = recPortfolio(funds(), { profile: { risk: { label: "Aggressive" }, horizon: { label: "Long Term" } } });
+  eq([conservative.by(2).status, conservative.by(2).trim.toPct], ["sell", 10]);
+  eq(growth.by(2).status === "sell", false);   // 18% is within Growth's 20%
+});
+
+test("Fit v2.1 C3: a fund house above 25% takes no new money; with fewer than 4 funds its equal share is the limit", () => {
+  const x = { amc: "AMC X" };
+  const { by } = recPortfolio([strong(1, "Large Cap Fund", "250000.00", x), strong(2, "Flexi Cap Fund", "250000.00"),
+    strong(3, "Value Fund", "250000.00"), strong(4, "Focused Fund", "250000.00"), strong(5, "Large & Mid Cap Fund", "250000.00", x)]);
+  eq([by(0).ruleId, by(4).ruleId], ["fit-amc-limit", "fit-amc-limit"]);   // 20% each (within the one-fund limit); AMC X = 40%
+  eq([by(1).status, by(2).status], ["invest", "invest"]);
+  const three = recPortfolio([strong(1, "Large Cap Fund", "100000.00"), strong(2, "Flexi Cap Fund", "100000.00"), strong(3, "Value Fund", "100000.00")]);
+  eq([0, 1, 2].every((i) => three.by(i).ruleId !== "fit-amc-limit"), true);   // 33% each: their equal share, not over the limit
+});
+
+test("Fit v2.1 C4: money from a sale goes to Invest funds only while they have room under the one-fund limit", () => {
+  const funds = (big) => [strong(1, "Large Cap Fund", big), strong(2, "Flexi Cap Fund", big), strong(3, "Value Fund", big),
+    strong(4, "Focused Fund", big), strong(5, "Large & Mid Cap Fund", big), strong(6, "Small Cap Fund", "250000.00")];
+  const roomy = recPortfolio(funds("150000.00"));   // ₹10L: Small Cap 25% → 15%; five Invest funds at 15% have 25 points of room
+  // v2.2: the 10 points cut go to the Invest funds, each only up to its room — never to the Recommended Portfolio here.
+  eq([roomy.by(5).trim.toPct, roomy.by(5).moveSplit.every((p) => /^Fund [1-5] \(Direct\)$/.test(p.to))], [15, true]);
+  const full = recPortfolio([strong(1, "Large Cap Fund", "200000.00"), strong(2, "Flexi Cap Fund", "200000.00"), strong(3, "Value Fund", "200000.00"),
+    strong(4, "Focused Fund", "150000.00"), strong(5, "Small Cap Fund", "250000.00")]);   // the others are at 20% (room 5 < the 10 cut)
+  // v2.2: the one fund with room takes what fits (5 points, to 20%); only the rest goes to the Recommended Portfolio.
+  const parts = Object.fromEntries(full.by(4).moveSplit.map((p) => [p.to, p.pct.toFixed(1)]));
+  eq([full.by(4).trim.toPct, parts], [15, { "Fund 4 (Direct)": "5.0", "the Prosperr Recommended Portfolio": "5.0" }]);
+});
+
+test("Fit v2.1 C5: an index fund whose return to the index's date is missing is not called a poor tracker", () => {
+  const idx = { assetClass: "Other" };
+  const g = recGrade("Index Funds", { r3y: 13.6, benchmark: { ...bm(9, 14.1, 13), fund: { r1y: 9, r3y: null, r5y: 13 } } }, { scheme: idx });
+  eq(g.ruleId, "passive-no-tracking");
+});
+
+test("Fit v2.1 C6: a gold fund exited because another gold fund is kept consolidates into it — gold stays gold", () => {
+  const gold = (code, value, name) => ({ isin: `G${code}`, value, scheme: recScheme(code, "FoF Domestic", { assetClass: "Other", schemeName: name }) });
+  const { by } = recPortfolio([strong(1, "Large Cap Fund", "17200.00"), strong(2, "Flexi Cap Fund", "17200.00"), strong(3, "Value Fund", "17200.00"),
+    strong(4, "Focused Fund", "17200.00"), strong(5, "Large & Mid Cap Fund", "17200.00"), gold(6, "8000.00", "Gold Fund A"), gold(7, "6000.00", "Gold Fund B")]);
+  const golds = [by(5), by(6)], sold = golds.filter((s) => s.status === "sell"), kept = golds.find((s) => s.status !== "sell");
+  eq([sold.length, Boolean(kept)], [1, true]);   // one exits for the fund count; the last gold fund stays
+  eq(/^Gold Fund [AB] \(Direct\)$/.test(sold[0].move), true);   // its money goes to the gold fund kept, not to equity
+});
+
+test("Fit v2.2 R1: duplicate gold — gold stays gold up to the 15% limit; the rest fills the portfolio's gap", () => {
+  const gold = (code, value, name) => ({ isin: `G${code}`, value, scheme: recScheme(code, "FoF Domestic", { assetClass: "Other", schemeName: name }) });
+  // ₹1L, ideal 2–4 funds: Gold A 12% kept, Gold B 8% exits for the count → 3 points fit under 15%, 5 go to equity.
+  const { by, result } = recPortfolio([strong(1, "Large Cap Fund", "40000.00"), strong(2, "Flexi Cap Fund", "40000.00"),
+    gold(3, "12000.00", "Gold Fund A"), gold(4, "8000.00", "Gold Fund B")]);
+  const goldSold = [by(2), by(3)].find((s) => s.status === "sell" && !s.trim);
+  const parts = Object.fromEntries(goldSold.moveSplit.map((p) => [p.to, p.pct.toFixed(1)]));
+  eq(Object.entries(parts).some(([to, pct]) => /^Gold Fund [AB]/.test(to) && pct === "3.0"), true);   // the kept gold fund up to 15%
+  eq(Object.entries(parts).filter(([to]) => !/^Gold Fund/.test(to)).reduce((t, [, pct]) => t + Number(pct), 0).toFixed(1), "5.0");   // the rest to equity
+  eq(result.flags.some((f) => f.id === "proceeds" && /Gold Fund [AB] \(Direct\) about ₹3,000/.test(f.text)), true);
+});
+
+test("Fit v2.2 R2: small holdings are cleaned up whatever their record; the money goes to the same category first", () => {
+  // ₹30L → ideal 4–8, small = below 100 / 8 × 0.25 = 3.125%. Fund 5 (Mid Cap, STRONG) is 2%: exits.
+  const { by, result } = recPortfolio([strong(1, "Large Cap Fund", "720000.00"), strong(2, "Flexi Cap Fund", "720000.00"),
+    strong(3, "Mid Cap Fund", "600000.00", { amc: "AMC 3" }), strong(4, "Value Fund", "900000.00"), strong(5, "Mid Cap Fund", "60000.00", { amc: "AMC 5" })]);
+  eq([by(4).status, by(4).ruleId, by(4).grade], ["sell", "fit-small", "STRONG"]);
+  eq(/not a view on the fund/.test(by(4).reason), true);
+  eq(by(4).move, "Fund 3 (Direct)");   // the Mid Cap fund marked Invest, which has room under the 25% Mid Cap limit
+  eq(result.flags.some((f) => f.id === "small" && /Fund 5 \(Direct\) is at or below 5% of the portfolio/.test(f.text)), true);
+  // In the PDF the reason is a clean-up, not the fund's performance.
+  const comment = fundCommentary({ name: "Fund 5", returns: { r1y: 20 }, benchmarkReturns: { r1y: 15 }, benchmark: "NIFTY Midcap 150 TRI",
+    call: { grade: "STRONG", ruleId: "fit-small", stage: "portfolio", move: by(4).move, moveSplit: by(4).moveSplit, fundWeightPct: 2 } }, "sell");
+  eq([/ahead of NIFTY Midcap 150 TRI/.test(comment), /at 2\.0% of the portfolio it is too small/.test(comment), /not a view on the fund/.test(comment), /consolidating the proceeds into Fund 3 \(Direct\)/.test(comment)], [true, true, true, true]);
+  // The only debt / gold / hybrid fund is not sold for being small: that would change the asset mix.
+  const debtOnly = recPortfolio([strong(1, "Large Cap Fund", "1450000.00"), strong(2, "Flexi Cap Fund", "1500000.00"),
+    { isin: "D", value: "50000.00", scheme: recScheme(3, "Liquid Fund", DEBT), stats: recStats(DEBT_MEDIAN), group: recGroup(DEBT_MEDIAN) }]);
+  eq(debtOnly.by(2).ruleId === "fit-small", false);
+});
+
+test("Fit v2.2 R2b: two small gold funds — the larger stays (less selling and tax), the smaller consolidates into it", () => {
+  const gold = (code, value, name) => ({ isin: `G${code}`, value, scheme: recScheme(code, "FoF Domestic", { assetClass: "Other", schemeName: name }) });
+  const { by } = recPortfolio([strong(1, "Large Cap Fund", "1600000.00"), strong(2, "Flexi Cap Fund", "1600000.00"), strong(3, "Value Fund", "1500000.00"),
+    gold(4, "50000.00", "Gold Fund Tiny"), gold(5, "250000.00", "Gold Fund Larger")]);
+  eq([by(3).status, by(3).ruleId, by(3).move, by(4).status], ["sell", "fit-small", "Gold Fund Larger (Direct)", "hold"]);
+});
+
+test("Fit v2.3 R2c: the only overseas fund is kept however small, and new money is suggested for it", () => {
+  const abroad = (code, value) => ({ isin: `O${code}`, value, scheme: recScheme(code, "FoF Overseas", { assetClass: "Other", schemeName: `Global Fund ${code}` }) });
+  const one = recPortfolio([strong(1, "Large Cap Fund", "1500000.00"), strong(2, "Flexi Cap Fund", "1500000.00"), strong(3, "Value Fund", "1380000.00"), abroad(4, "120000.00")]);
+  eq([one.by(3).status === "sell", one.result.flags.some((f) => f.id === "overseas" && /only overseas fund, at 2\.7%/.test(f.text) && /about ₹3,30,000/.test(f.text))], [false, true]);
+  // Two small overseas funds: the larger stays, the smaller consolidates into it.
+  const two = recPortfolio([strong(1, "Large Cap Fund", "1500000.00"), strong(2, "Flexi Cap Fund", "1500000.00"), strong(3, "Value Fund", "1300000.00"), abroad(4, "150000.00"), abroad(5, "50000.00")]);
+  eq([two.by(4).status, two.by(4).move, two.by(3).status === "sell"], ["sell", "Global Fund 4 (Direct)", false]);
+});
+
+test("Fit v2.2 R3: proceeds fill the Large / Mid / Small gap first, each fund only up to its room", () => {
+  const caps = (id, large, mid, small) => ({ holdings: [["large", large], ["mid", mid], ["small", small]].map(([marketCap, weight]) => ({ isin: `${id}-${marketCap}`, assetType: "equity", marketCap, weight })) });
+  // ₹50L: four Invest funds at 12.5% (room 7.5 each under 20%), two Hold funds, and a WEAK fund at 10% that exits.
+  // The equity is mostly large caps, so the Invest fund with the most mid / small caps (Fund 2) takes the money first.
+  const { by } = recPortfolio([strong(1, "Large Cap Fund", "625000.00"), strong(2, "Flexi Cap Fund", "625000.00"), strong(3, "Value Fund", "625000.00"),
+    strong(4, "Focused Fund", "625000.00"), mixed(5, "Multi Cap Fund", "1000000.00"), mixed(6, "Large & Mid Cap Fund", "1000000.00"),
+    { isin: "W", value: "500000.00", scheme: recScheme(7, "Contra Fund"), stats: recStats(WEAK) }],
+  { fundHoldings: { S1: caps("a", 95, 5, 0), S2: caps("b", 40, 35, 25), S3: caps("c", 90, 10, 0), S4: caps("d", 92, 8, 0), W: caps("e", 90, 10, 0) } });
+  eq(by(6).status, "sell");
+  eq(by(6).moveSplit[0].to, "Fund 2 (Direct)");
+  eq(by(6).moveSplit[0].pct >= Math.max(...by(6).moveSplit.map((p) => p.pct)), true);
+  eq(by(6).moveSplit.every((p) => p.to !== "the Prosperr Recommended Portfolio"), true);   // 10 points fit in 30 points of room
 });
 
 test("Fit P9: 400 random portfolios — the safety rules hold in every one (seeded, repeatable)", () => {
@@ -1432,12 +1556,29 @@ test("Fit P9: 400 random portfolios — the safety rules hold in every one (seed
     // The last gold / silver fund is never exited for fit.
     const gold = all.filter(({ f }) => f.scheme.category === "FoF Domestic");
     if (gold.length) eq(gold.some(({ s }) => s.status !== "sell" || s.trim), true, `run ${run}: every gold fund exited`);
-    // Money only moves to a fund that is INVEST in the final result.
-    const invest = new Set(all.filter(({ s }) => s.status === "invest").map(({ f }) => `${f.scheme.schemeName} (${f.scheme.plan})`));
+    // Money only moves to a fund that is INVEST in the final result (or, for gold / silver and overseas, the kept fund of
+    // its kind), and no fund is filled above the one-fund limit or a capped category above its limit by the money.
+    const nameOf = (f) => `${f.scheme.schemeName} (${f.scheme.plan})`;
+    const invest = new Set(all.filter(({ s }) => s.status === "invest").map(({ f }) => nameOf(f)));
+    const inflow = new Map();
     for (const { f, s } of all) {
-      if (s.status !== "sell" || !s.move) continue;
-      const named = !["the Invest funds", "the equity funds marked Invest", "the Prosperr Recommended Portfolio"].includes(s.move);
-      eq(named ? invest.has(s.move) : s.move === "the Prosperr Recommended Portfolio" || invest.size > 0, true, `run ${run}, ${f.isin}: money moved to ${s.move}`);
+      if (s.status !== "sell" || !s.moveSplit) continue;
+      eq(Math.abs(s.moveSplit.reduce((t, p) => t + p.share, 0) - 1) < 1e-6, true, `run ${run}, ${f.isin}: shares add to 1`);
+      for (const p of s.moveSplit) {
+        const keptSame = all.find(({ f: o, s: t }) => nameOf(o) === p.to && t.status !== "sell" && t.engine === s.engine && ["commodity", "overseas"].includes(s.engine));
+        eq(p.to === "the Prosperr Recommended Portfolio" || invest.has(p.to) || Boolean(keptSame), true, `run ${run}, ${f.isin}: money moved to ${p.to}`);
+        inflow.set(p.to, (inflow.get(p.to) ?? 0) + p.pct);
+      }
+    }
+    const after = (f, s) => (s.status === "sell" ? (s.trim ? s.trim.toPct : 0) : s.weightPct) + (inflow.get(nameOf(f)) ?? 0);
+    const keptCount = all.filter(({ s }) => s.status !== "sell" || s.trim).length;
+    for (const { f, s } of all) {
+      if (!inflow.has(nameOf(f)) || !["Large Cap Fund", "Mid Cap Fund", "Small Cap Fund", "Flexi Cap Fund", "Value Fund"].includes(f.scheme.category)) continue;
+      eq(after(f, s) <= Math.max(20, 100 / keptCount) + 1e-6, true, `run ${run}, ${f.isin}: filled above the one-fund limit`);
+    }
+    for (const [cat, limit] of [["Mid Cap Fund", 25], ["Small Cap Fund", 15]]) {
+      const group = all.filter(({ f }) => f.scheme.category === cat);
+      if (group.some(({ f }) => inflow.has(nameOf(f)))) eq(group.reduce((t, { f, s }) => t + after(f, s), 0) <= limit + 1e-6, true, `run ${run}: ${cat} filled above its limit`);
     }
     // A Hold never sends new money to a fund that does not take it.
     for (const { f, s } of all) {
@@ -1502,7 +1643,7 @@ test("Stage 2 C4: the best index tracker above the limit is replaced; a poor tra
   const one = recPortfolio([idx(1, "2,00,00,000.00", 14.9), idx(2, "2,00,00,000.00", 13.5, "NIFTY Next 50", "B2"), ...padding(9)]);
   eq([one.by(0).trim?.toPct.toFixed(1), one.by(1).trim?.toPct.toFixed(1)], ["12.0", "8.0"]);
   // All poor: every one exits, and a good tracker is suggested.
-  const poor = recPortfolio([idx(1, "50,00,000.00", 13.5), idx(2, "50,00,000.00", 13.4, "NIFTY Next 50", "B2"), ...padding(9)]);
+  const poor = recPortfolio([idx(1, "60,00,000.00", 13.5), idx(2, "60,00,000.00", 13.4, "NIFTY Next 50", "B2"), ...padding(9)]);   // 5.9% each: above the 5% clean-up
   eq([poor.by(0).status, poor.by(1).status, poor.result.flags.some((f) => f.id === "passive" && /trails its index/.test(f.text))], ["sell", "sell", true]);
   // Four good funds where 3 are enough: the box only promises what is marked.
   const four = recPortfolio([idx(1, "40,00,000.00", 14.95), idx(2, "40,00,000.00", 14.9, "NIFTY Next 50", "B2"), idx(3, "40,00,000.00", 14.85, "NIFTY Midcap 150", "B3"), idx(4, "40,00,000.00", 14.8, "NIFTY Smallcap 250", "B4"), ...padding(9)]);
@@ -1536,7 +1677,10 @@ test("Stage 2 C6b: debt and arbitrage — above 20% is left alone, at most 2–3
     debt(3, "10,00,000.00", "Gilt Fund", { r3y: 7.1, r5y: 6.6, quartile3y: 2 }), debt(4, "10,00,000.00", "Short Duration Fund", { r3y: 7.05, r5y: 6.55, quartile3y: 2 }), ...padding(4).map((f) => ({ ...f, value: "10,00,000.00" }))]);
   const calls = [0, 1, 2, 3].map((i) => many.by(i));
   eq(calls.filter((x) => x.status === "sell" && !x.trim).length >= 1, true);
-  eq(calls.filter((x) => x.move).every((x) => x.move === calls.find((y) => y.status === "invest")?.scheme || /\(Direct\)$/.test(x.move)), true);   // named debt fund
+  const debtNames = new Set([1, 2, 3, 4].map((code) => `Fund ${code} (Direct)`));
+  // The money stays in debt funds while one can take it; past the fund house's 25% it goes to the Recommended Portfolio.
+  eq(calls.filter((x) => x.moveSplit).every((x) => x.moveSplit.every((p) => debtNames.has(p.to) || p.to === "the Prosperr Recommended Portfolio")), true);
+  eq(calls.filter((x) => x.moveSplit).some((x) => x.moveSplit.some((p) => debtNames.has(p.to))), true);
 });
 
 test("Stage 2 C6c: the Large / Mid / Small basket is the lower of what risk and horizon allow", () => {
@@ -1571,8 +1715,8 @@ test("Stage 2 C9: sale money stays on its side — equity to equity, debt to deb
 
 test("Stage 2 C10: index funds — a second fund on the same index goes first; a stub left by a cut exits in full", () => {
   const idx = (code, value, r3y, name, c) => ({ isin: `I${code}`, value, scheme: recScheme(code, "Index Funds", { assetClass: "Other", schemeName: `${name} Index Fund ${code}` }), stats: recStats({ r3y, benchmark: bm(10, 15, 14, name, c) }) });
-  const { by } = recPortfolio([idx(1, "40,00,000.00", 14.95, "NIFTY 50", "N50"), idx(2, "40,00,000.00", 14.9, "NIFTY 50", "N50"), idx(3, "40,00,000.00", 14.8, "NIFTY Midcap 150", "M150"),
-    idx(4, "40,00,000.00", 14.7, "NIFTY Smallcap 250", "S250"), ...padding(9)]);
+  const { by } = recPortfolio([idx(1, "80,00,000.00", 14.95, "NIFTY 50", "N50"), idx(2, "80,00,000.00", 14.9, "NIFTY 50", "N50"), idx(3, "80,00,000.00", 14.8, "NIFTY Midcap 150", "M150"),
+    idx(4, "80,00,000.00", 14.7, "NIFTY Smallcap 250", "S250"), ...padding(9)]);   // 6.6% each: above the 5% clean-up
   eq([by(1).status, by(1).trim, by(1).reason.includes("already covers the same index")], ["sell", null, true]);
   const thematic = (code, value, b) => ({ isin: `T${code}`, value, scheme: recScheme(code, "Sectoral/Thematic"), stats: recStats({ benchmark: b }) });
   const stub = recPortfolio([strong(1, "Large Cap Fund", "45000.00"), strong(2, "Mid Cap Fund", "30000.00"), thematic(3, "16000.00", bm(12, 17.3, 15.5)), thematic(4, "9000.00", bm(9, 15, 14))]);
@@ -1582,7 +1726,7 @@ test("Stage 2 C10: index funds — a second fund on the same index goes first; a
 test("Stage 2 C11: same index, tracking within 0.5 pp — the large holding stays and the tiny one goes; one fund is flagged under-diversified", () => {
   const idx = (code, value, r3y) => ({ isin: `I${code}`, value, scheme: recScheme(code, "Index Funds", { assetClass: "Other", schemeName: `NIFTY 50 Index Fund ${code}` }), stats: recStats({ r3y, benchmark: bm(10, 15, 14, "NIFTY 50", "N50") }) });
   const { by } = recPortfolio([idx(1, "1,50,00,000.00", 14.85), idx(2, "3,00,000.00", 14.95), ...padding(8)]);
-  eq([by(0).status, by(1).status, by(1).ruleId], ["invest", "hold", "passive-same-index"]);   // 0.1 pp better tracking: the large fund leads; no limit is open, so nothing is sold
+  eq([by(0).status, by(1).status, by(1).ruleId, by(1).move], ["invest", "sell", "fit-small", "NIFTY 50 Index Fund 1 (Direct)"]);   // 0.1 pp better tracking: the large fund leads; v2.2: the 0.3% stub is cleaned up into it
   const one = recPortfolio([strong(1, "Flexi Cap Fund", "9,00,000.00")]);
   eq(one.result.flags.some((f) => f.id === "count" && /holds 1 fund, fewer than/.test(f.text)), true);
 });
@@ -1707,8 +1851,54 @@ test("Detailed report: the logic's basis reaches a row only when the advisor kep
   const calls = { [keys[0]]: { verdict: "sell", grade: "STRONG", stage: "portfolio" }, [keys[1]]: { verdict: "sell", grade: "WEAK", stage: "fund" } };
   const m = buildDetailedReport({ portfolio: p, fundData: SAMPLE_FUND_DATA, verdicts: { [keys[0]]: "sell", [keys[1]]: "hold" }, calls, suggestions: [{ id: "count", text: "x".repeat(20) }] });
   const rows = m.holdings.groups.flatMap((g) => g.rows);
-  eq([rows.find((r) => r.key === keys[0]).call, rows.find((r) => r.key === keys[1]).call], [{ grade: "STRONG", ruleId: null, stage: "portfolio", trim: null, move: null }, null]);
+  eq([rows.find((r) => r.key === keys[0]).call, rows.find((r) => r.key === keys[1]).call], [{ grade: "STRONG", ruleId: null, stage: "portfolio", trim: null, move: null, moveSplit: null, fundWeightPct: null }, null]);
   eq(m.suggestions.length, 1);
+});
+
+test("Auto v2.3 Y2: a small fund whose rating is pending is decided on its last year — Hold or Sell", () => {
+  const young = { r3y: null, r5y: null, firstDate: "2024-06-01", rank1y: 10, quartile1y: 2, n1y: 30 };
+  const decide = (category, stats, weightPct, { scheme, median } = {}) => {
+    const st = recStats({ ...young, ...stats }), group = recGroup(median);
+    const g = gradeFund({ scheme: recScheme(1, category, scheme), name: "", stats: st, group, statsAsOf: REC_AS_OF });
+    const d = gradeYoungSmall(g, { stats: st, median: group.median, weightPct }, RECOMMENDATION);
+    return [g.ruleId, d.grade, d.ruleId];
+  };
+  // 1 year or more: against the category's 1Y median (10%); the gap is 1 pp.
+  eq(decide("Flexi Cap Fund", { r1y: 11 }, 5), ["young", "MIXED", "young-1y-in-line"]);
+  eq(decide("Flexi Cap Fund", { r1y: 9.5 }, 5), ["young", "MIXED", "young-1y-in-line"]);     // 0.5 pp behind: in line
+  eq(decide("Flexi Cap Fund", { r1y: 8.5, quartile1y: 3 }, 5), ["young", "WEAK", "young-1y-behind"]);
+  // The worst performers (bottom quarter) are sold, even when recovering in the short term.
+  eq(decide("Flexi Cap Fund", { r1y: 6, quartile1y: 4, rank1y: 29, r6m: 9, r3m: 5 }, 5, { median: { r6m: 4, r3m: 2 } }), ["young-1y-recovering", "WEAK", "young-1y-behind"]);
+  // 8% or more of the portfolio: still the advisor's call.
+  eq(decide("Flexi Cap Fund", { r1y: 11 }, 8), ["young", "REVIEW", "young"]);
+  eq(decide("Flexi Cap Fund", { r1y: 6, quartile1y: 4, r6m: 9, r3m: 5 }, 9, { median: { r6m: 4, r3m: 2 } }), ["young-1y-recovering", "MIXED", "young-1y-recovering"]);
+  // Under a year (no 1Y): equity on its absolute return since launch, above 15% → Hold.
+  const fresh = { r1y: null, rank1y: null, quartile1y: null, n1y: null, firstDate: "2026-03-01" };
+  eq(decide("Mid Cap Fund", { ...fresh, rLaunch: 16 }, 3), ["young", "MIXED", "young-new-in-line"]);
+  eq(decide("Mid Cap Fund", { ...fresh, rLaunch: 15 }, 3), ["young", "WEAK", "young-new-behind"]);   // not above 15
+  eq(decide("Mid Cap Fund", { ...fresh, rLaunch: null }, 3), ["young", "REVIEW", "young"]);          // nothing to judge on
+  // Debt: not held to an equity return — 6M against the category; a few basis points apart is in line.
+  eq(decide("Liquid Fund", { ...fresh, r6m: 3.4 }, 3, { scheme: DEBT, median: { r6m: 3.5 } }), ["young", "MIXED", "young-new-in-line"]);
+  eq(decide("Liquid Fund", { ...fresh, r6m: 3.0 }, 3, { scheme: DEBT, median: { r6m: 3.5 } }), ["young", "WEAK", "young-new-behind"]);
+  eq(decide("Liquid Fund", { r1y: 6.95, quartile1y: 4 }, 3, { scheme: DEBT, median: { r1y: 7 } }), ["young", "MIXED", "young-1y-in-line"]);   // bottom quarter by 5 bp
+  // Sectoral: against its own index, not other sectors; without the index figure it stays REVIEW.
+  eq(decide("Sectoral/Thematic", { r1y: 20, benchmark: bm(18, 15, 14) }, 4), ["young", "MIXED", "young-1y-in-line"]);
+  eq(decide("Sectoral/Thematic", { r1y: 12, benchmark: bm(18, 15, 14) }, 4), ["young", "WEAK", "young-1y-behind"]);
+  eq(decide("Sectoral/Thematic", { r1y: 12 }, 4), ["young", "REVIEW", "young"]);
+  // No category median: nothing is guessed.
+  eq(decide("Flexi Cap Fund", { r1y: 11 }, 5, { median: { r1y: null } }), ["young", "REVIEW", "young"]);
+});
+
+test("Auto v2.3 Y3: the young-fund call then goes through the portfolio check like any fund", () => {
+  const young = (code, value, over) => ({ isin: `Y${code}`, value, scheme: recScheme(code, "Flexi Cap Fund"), stats: recStats({ r3y: null, r5y: null, firstDate: "2024-06-01", rank1y: 10, quartile1y: 2, n1y: 30, ...over }) });
+  // ₹30L, ideal 4–8, small below 3.125%. Fund 5 (7%, ahead over 1Y) → Hold; Fund 6 (6%, behind) → Sell to an Invest fund.
+  const { by } = recPortfolio([strong(1, "Large Cap Fund", "600000.00"), strong(2, "Value Fund", "600000.00"), strong(3, "Focused Fund", "600000.00"),
+    strong(4, "Large & Mid Cap Fund", "600000.00"), young(5, "210000.00", { r1y: 12 }), young(6, "180000.00", { r1y: 7, quartile1y: 4 }), young(7, "60000.00", { r1y: 13 })]);
+  eq([by(4).status, by(4).ruleId], ["hold", "young-1y-in-line"]);
+  eq([by(5).status, by(5).ruleId, by(5).grade, Boolean(by(5).move)], ["sell", "young-1y-behind", "WEAK", true]);
+  eq([by(6).status, by(6).ruleId], ["sell", "fit-small"]);   // good on its year, but 2% of the portfolio: the clean-up applies
+  const pdf = fundCommentary({ name: "Fund 6", returns: { r1y: 7 }, benchmarkReturns: { r1y: 9 }, benchmark: "NIFTY 500 TRI", call: { grade: "WEAK", ruleId: "young-1y-behind", stage: "fund", move: by(5).move } }, "sell");
+  eq(/rating is still pending, and over the last year it is behind its peers/.test(pdf), true);
 });
 
 test("Auto: legacy AMFI category and unknown asset class → REVIEW", () => {

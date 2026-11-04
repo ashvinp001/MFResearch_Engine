@@ -19,10 +19,10 @@ export function wayForward(stage, model) {
     kpi("FUNDS RECOMMENDED", String(rec?.rows.length ?? 0), "navy"),
     kpi("TOTAL ALLOCATION", rec ? allocText(rec.totalPct) : DASH, "green", "green-value")));
 
+  // Plain figures: no ahead / behind colouring in this table (owner, 2026-11-04).
   const ret = (item, period) => {
     const v = item.returns?.[period];
-    const b = item.benchmarkReturns?.[period];
-    return h("td", { class: `num ${typeof v === "number" && typeof b === "number" ? (v >= b ? "up" : "down") : ""}` }, typeof v === "number" ? pct1(v) : DASH);
+    return h("td", { class: "num" }, typeof v === "number" ? pct1(v) : DASH);
   };
   const rows = (rec?.rows ?? []).map((item) => h("tr", {},
     h("td", { class: "fund" }, item.name),
@@ -44,9 +44,6 @@ export function wayForward(stage, model) {
       h("th", { class: "num" }, "ALLOC."), h("th", { class: "num" }, "1Y"), h("th", { class: "num" }, "3Y"), h("th", { class: "num" }, "5Y"), h("th", { class: "num" }, sip ? ["MONTHLY SIP", h("br"), "(₹)"] : ["LUMPSUM", h("br"), "(₹)"]))),
     groups: rows,
   });
-  w.block(h("div", { class: "dr-keys" },
-    h("span", {}, h("i", { class: "up fill" }), "Ahead of benchmark"),
-    h("span", {}, h("i", { class: "down fill" }), "Behind benchmark — returns shown vs each fund's category benchmark.")));
 
   w.block(h("h2", { class: "dr-h" }, "WHY THESE FUNDS"));
   const held = new Map(model.holdings.groups.flatMap((group) => group.rows).map((row) => [row.isin, row]));

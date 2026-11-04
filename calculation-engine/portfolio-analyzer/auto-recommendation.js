@@ -33,7 +33,7 @@ import { RECOMMENDATION } from "../config.js";
 import { holdingKey } from "../model/portfolio.schema.js";
 import { toPaise } from "../cas/parse-values.js";
 import { isNum } from "../analytics/stats.js";
-import { creditQuality, elssLock, engineOf, gradeFund, isElss, pp } from "./fund-grading.js";
+import { creditQuality, elssLock, engineOf, gradeFund, gradeYoungSmall, isElss, pp } from "./fund-grading.js";
 import { fundOverlap } from "./fund-overlap.js";
 import { capSplit, comparison, decidePortfolio, fitNotes, fundCall, suggestionBox } from "./portfolio-fit.js";
 
@@ -74,6 +74,10 @@ export function autoRecommend({ portfolio, schemes = {}, peerStats = null, fundH
     }
     return fund;
   });
+
+  // v2.3: a fund whose rating is pending and is a small share of the portfolio (all its folios and plans together) is
+  // decided on its last year, Hold or Sell (fund-grading.js gradeYoungSmall); Stage 2 below then checks its fit.
+  for (const row of rows) row.graded = gradeYoungSmall(row.graded, row, config);
 
   // A STRONG fund that should not take new money right now (§6): already a large share, or 1Y sharply behind.
   for (const row of rows) {
@@ -123,7 +127,7 @@ export function autoRecommend({ portfolio, schemes = {}, peerStats = null, fundH
         details: graded.details, notes, pillars: graded.pillars, peers: graded.peers ?? null, excess: graded.excess ?? null,
         benchmark: graded.benchmarkName ? { name: graded.benchmarkName, ...graded.benchmarkExcess } : null,
         schemeCode: row.scheme?.schemeCode ?? null, weightPct: row.weightPct, fundWeightPct: fund.weightPct, folios: fund.members.length,
-        trim, move: sold ? call.move ?? null : null, compare,
+        trim, move: sold ? call.move ?? null : null, moveSplit: sold ? call.moveSplit ?? null : null, compare,
       };
     }
   }

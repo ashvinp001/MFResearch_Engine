@@ -212,6 +212,65 @@ export function gradeFund({ scheme, name, stats, group, credit = null, statsAsOf
  * (2 pp for equity / hybrid, 0.3 pp for debt / arbitrage); recovering = at or above the category median
  * over 6M or 3M (true / false, or null when neither can be compared).
  */
+/**
+ * v2.3 (owner): a fund whose rating is pending — under 3 years of NAVs (REVIEW "young", or held while "recovering") — and
+ * below youngSmallMaxWeightPct of the portfolio is decided on its last year, Hold or Sell; a larger holding stays the
+ * advisor's call. Stage 2 then checks that the fund fits the portfolio, like any other fund.
+ *   A year of NAVs or more: against its category over 1Y (a sectoral / thematic fund: against its own index, as its
+ *     peers are other sectors). In the bottom quarter of the category → Sell (the worst performers; for debt and
+ *     arbitrage only when also clearly behind, as their returns sit basis points apart); more than the gap behind the
+ *     median or the index → Sell; otherwise → Hold.
+ *   Under a year: an equity or sectoral fund on its absolute return since launch — above youngLaunchHoldPct → Hold,
+ *     else Sell. A hybrid, debt or arbitrage fund is not held to an equity return: against its category over 6M, else 3M.
+ *   No figure to judge on (or no category median) → it stays REVIEW: nothing is guessed.
+ * Hold is graded MIXED and Sell WEAK, so the Stage 2 rules (overlap, fund count, limits) apply to them as to any fund.
+ */
+export function gradeYoungSmall(graded, { stats, median, weightPct }, config = RECOMMENDATION) {
+  if (!["young", "young-1y-recovering"].includes(graded.ruleId) || !stats || !isNum(weightPct) || weightPct >= config.youngSmallMaxWeightPct) return graded;
+  const engine = graded.engine;
+  if (!["equity", "thematic", "hybrid", "debt", "arbitrage"].includes(engine)) return graded;
+  const m = median ?? {};
+  const defensive = engine === "debt" || engine === "arbitrage";
+  const gap = defensive ? config.debtGapPp : config.equityGapPp;
+  const years = stats.firstDate && stats.navDate ? daysBetween(stats.firstDate, stats.navDate) / 365.25 : null;
+  const pending = `Rating pending: ${years === null ? "a short" : `${years.toFixed(1)} years of`} NAV history, fewer than 3 to rate. At ${weightPct.toFixed(1)}% of the portfolio (below ${config.youngSmallMaxWeightPct}%) it is decided on its last year`;
+  let good, evidence, period, e1 = null, absolute = false;
+  if (isNum(stats.r1y)) {
+    period = "1y";
+    if (engine === "thematic") {
+      const bm = stats.benchmark;
+      const b1 = bm && isNum(fundReturn(stats, bm, "r1y")) && isNum(bm.r1y) ? fundReturn(stats, bm, "r1y") - bm.r1y : null;
+      if (b1 === null) return graded;
+      good = b1 >= -config.benchmarkGapPp;
+      evidence = `1Y ${pc(fundReturn(stats, bm, "r1y"))} vs ${pc(bm.r1y)} for its own index${bm.name ? ` (${bm.name})` : ""}, ${pp(b1)}`;
+    } else {
+      if (!isNum(m.r1y)) return graded;
+      e1 = stats.r1y - m.r1y;
+      const bottom = stats.quartile1y === 4 && (!defensive || e1 < -gap);
+      good = !bottom && e1 >= -gap;
+      const rank = isNum(stats.rank1y) && isNum(stats.n1y) ? `, rank ${stats.rank1y} of ${stats.n1y}${stats.quartile1y === 4 ? ", bottom quarter" : ""}` : "";
+      evidence = `1Y ${pc(stats.r1y)} vs ${pc(m.r1y)} for the category median (${pp(e1)}${rank})`;
+    }
+  } else if (!defensive && engine !== "hybrid") {
+    period = "new";
+    if (!isNum(stats.rLaunch)) return graded;
+    good = stats.rLaunch > config.youngLaunchHoldPct;
+    absolute = true;
+    evidence = `under a year old: ${pc(stats.rLaunch)} absolute return since ${stats.firstDate}, ${good ? "above" : "not above"} the ${config.youngLaunchHoldPct}% needed to hold`;
+  } else {
+    period = "new";
+    const short = config.oneYearShortTermMonths.map((mo) => ({ mo, x: isNum(stats[`r${mo}m`]) && isNum(m[`r${mo}m`]) ? stats[`r${mo}m`] - m[`r${mo}m`] : null })).find((s) => s.x !== null);
+    if (!short) return graded;
+    good = short.x >= -gap;
+    evidence = `under a year old: ${short.mo}M ${pc(stats[`r${short.mo}m`])} vs ${pc(m[`r${short.mo}m`])} for the category median (${pp(short.x)})`;
+  }
+  return {
+    ...graded, grade: good ? "MIXED" : "WEAK", ruleId: `young-${period}-${good ? "in-line" : "behind"}`,
+    reason: `${pending}: ${evidence} — ${good ? (absolute ? "so held" : "in line with or ahead, so held") : (absolute ? "so we recommend exiting" : "behind, so we recommend exiting")}.`,
+    excess: { e1, e3: null, e5: null }, peers: graded.peers ?? null,
+  };
+}
+
 function oneYearCheck(stats, median, minGap, config) {
   // Bottom quartile AND clearly behind: liquid funds sit within a few basis points of each other.
   if (stats.quartile1y !== 4 || !(isNum(stats.r1y) && isNum(median.r1y) && stats.r1y - median.r1y < -minGap)) return null;
@@ -280,7 +339,8 @@ function sectorCheck(sector, market, config = RECOMMENDATION, label = "Sector") 
 function gradePassive(scheme, stats, config, out) {
   const bm = stats?.benchmark ?? null;
   if (isSectorPassive(scheme) && stats && isNum(stats.r3y)) return gradeSectorPassive(stats, config, out);
-  if (!stats || !isNum(stats.r3y) || !bm || !isNum(bm.r3y)) {
+  // r3y is the fund's return measured to the index's date: without it there is no like-for-like tracking figure.
+  if (!stats || !isNum(stats.r3y) || !bm || !isNum(bm.r3y) || !isNum(fundReturn(stats, bm, "r3y"))) {
     return out("HOLD", "passive-no-tracking", "Index fund / ETF — fewer than 3 years of NAV history or no benchmark data to judge its tracking.");
   }
   const r3y = fundReturn(stats, bm, "r3y");
@@ -341,7 +401,7 @@ function gradeSectorPassive(stats, config, out) {
   if (own && ((isNum(stats.worstDay3y) && stats.worstDay3y < -20) || implausible)) {
     sector = { state: "unknown", text: "The fund's NAV history has a break (e.g. a unit split) — sector performance cannot be judged from it" };
   }
-  const td = bm && isNum(bm.r3y) ? fundReturn(stats, bm, "r3y") - bm.r3y : null;
+  const td = bm && isNum(bm.r3y) && isNum(fundReturn(stats, bm, "r3y")) ? fundReturn(stats, bm, "r3y") - bm.r3y : null;
   const pillars = {};
   if (sector.state !== "unknown") pillars.M = { state: sector.state === "lagging" ? DOWN : sector.state === "ahead" ? UP : FLAT, text: sector.text };
   if (td !== null) pillars.T = { state: td >= -config.passiveTrackingPp ? UP : DOWN, text: `tracking ${pp(td)} a year vs ${bm.name ?? bm.code}` };

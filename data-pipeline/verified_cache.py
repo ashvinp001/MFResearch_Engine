@@ -45,7 +45,7 @@ def cached_manifest(client, path: str, bucket: str, ttl: int = MANIFEST_TTL) -> 
     younger than ttl seconds."""
     local = _folder(bucket) / ("".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in path) or "file.json")
     try:
-        if time.time() - local.stat().st_mtime < ttl:
+        if ttl > 0 and time.time() - local.stat().st_mtime < ttl:   # ttl 0 = always refresh (a file time can sit a hair ahead of the clock)
             return json.loads(local.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         pass

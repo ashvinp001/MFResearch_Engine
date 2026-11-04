@@ -7,6 +7,8 @@ Usage:
 For every stored, active scheme whose latest NAV is current (at most STALE_DAYS before AMFI's data date),
 at its own ANCHOR T (latest NAV), with the same rules as calculation-engine/analytics (MF_Calculation_Engine.md):
   r3m, r6m         E2 short-term returns (simple), for the 1-year rule
+  rLaunch          a fund with less than a year of NAVs: its absolute (simple) return from the first stored NAV to T,
+                   for the rule on young funds; null for a fund with a year or more
   r1y, r3y, r5y    E2 trailing returns: start NAV NEAREST-PREVIOUS (10-day cap); > 12 months = CAGR on actual days
   sharpe3y         E12 R1/R2: month-end returns over the last 36 completed months (min 30), σ = STDEV.S × √12,
                    Sharpe = (r3y − Rf) / σ
@@ -169,7 +171,9 @@ def fund_figures(series: Series, ends: list[date]) -> dict:
         value = trailing(series, point, 36) if point else None
         if value is not None:
             rolling[end] = value
+    young = (anchor[0] - series.dates[0]).days < 365 and series.navs[0] > 0
     return {"navDate": anchor[0], "firstDate": series.dates[0], "r3m": trailing(series, anchor, 3), "r6m": trailing(series, anchor, 6),
+            "rLaunch": anchor[1] / series.navs[0] - 1 if young else None,
             "r1y": trailing(series, anchor, 12), "r3y": r3y,
             "r5y": trailing(series, anchor, 60), "sharpe3y": sharpe_3y(series, anchor, r3y),
             "maxDrawdown3y": deepest, "worstDay3y": worst, "rolling": rolling, "recent": recent}
@@ -214,7 +218,7 @@ def peer_statistics(figures: dict, group_of: dict, ends: list[date]) -> tuple[di
             r, s, y = by_return.get(c), by_sharpe.get(c), by_1y.get(c)
             funds[str(c)] = {
                 "group": key, "navDate": f["navDate"].isoformat(), "firstDate": f["firstDate"].isoformat(),
-                "r3m": pct(f["r3m"]), "r6m": pct(f["r6m"]), "r1y": pct(f["r1y"]), "r3y": pct(f["r3y"]), "r5y": pct(f["r5y"]), "sharpe3y": rnd(f["sharpe3y"]),
+                "r3m": pct(f["r3m"]), "r6m": pct(f["r6m"]), "rLaunch": pct(f["rLaunch"]), "r1y": pct(f["r1y"]), "r3y": pct(f["r3y"]), "r5y": pct(f["r5y"]), "sharpe3y": rnd(f["sharpe3y"]),
                 "maxDrawdown3y": pct(f["maxDrawdown3y"]), "worstDay3y": pct(f["worstDay3y"]),
                 "rank1y": y[0] if y else None, "quartile1y": y[1] if y else None, "n1y": y[2] if y else None,
                 "rank3y": r[0] if r else None, "quartile3y": r[1] if r else None, "n3y": r[2] if r else None,

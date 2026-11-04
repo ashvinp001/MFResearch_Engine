@@ -43,7 +43,7 @@ export const PORTFOLIO_ANALYTICS = Object.freeze({
 
 // Recommendation_Logic.md — automatic Invest / Hold / Sell pre-selection. Percent / percentage points.
 export const RECOMMENDATION = Object.freeze({
-  version: "2.0",
+  version: "2.3",
   highOverlapPct: 50,        // two active equity funds holding this share of the same stocks = largely the same exposure
   overlapMinMeasures: 4,     // the overlap comparison needs at least this many measures both funds have
   sectorLagPp: 2.0,          // a sector index this far a year behind NIFTY 500 on 3Y and 5Y (and behind on 1Y) = not performing
@@ -63,12 +63,19 @@ export const RECOMMENDATION = Object.freeze({
   investMaxWeightPct: 20,    // a STRONG fund already above this share of the portfolio → HOLD, not INVEST
   oneYearShortTermMonths: [6, 3], // 1-year rule (young funds only): "decent in the short term" = at or above the category median over 6M or 3M
   investMin1yExcessPp: -5.0, // a STRONG fund trailing its category's 1Y median by more than this (a sharp fall) → HOLD
+  // v2.3 (owner): a fund whose rating is pending (under 3 years of NAVs) and below this share of the portfolio is decided
+  // on its last year — Hold or Sell — instead of waiting for the advisor; a larger one stays the advisor's call.
+  youngSmallMaxWeightPct: 8,
+  youngLaunchHoldPct: 15,    // …under a year old (equity / sectoral): absolute return since launch above this → Hold, else Sell
   staleDays: 7,              // peer statistics older than this vs the fund's NAV date → REVIEW
   elssLockYears: 3,
-  flags: Object.freeze({ amcPct: 40, thematicPct: 15, goldSilverPct: 15, overseasPct: 30 }),
+  // amcPct: one fund house at most this share (owner, v2.1: 25%; in a portfolio of fewer than 4 funds, its equal share).
+  flags: Object.freeze({ amcPct: 25, thematicPct: 15, goldSilverPct: 15, overseasPct: 30 }),
   // Portfolio fit (v1.4): the ideal fund count is the Diversification range for the portfolio's value.
   fit: Object.freeze({
     smallShareOfAverage: 0.25, // small holding = below this × the average fund share at the ideal maximum (100 / max)
+    overseasSuggestPct: 10,    // v2.3: the only overseas fund, kept however small — new money suggested to bring it to this share
+    cleanupMaxPct: 5,          // v2.2 (owner): a fund at or below this share of the portfolio is sold to consolidate, whatever its record
     passiveMaxFunds: 3,        // equity index funds / ETFs (not gold / silver / debt) a portfolio needs at most…
     passiveMaxFundsSmall: 2,   // …or this many when its ideal maximum is ≤ smallPortfolioIdealMax funds
     smallPortfolioIdealMax: 6,
@@ -82,10 +89,12 @@ export const RECOMMENDATION = Object.freeze({
     reviewSellMaxPct: 25,      // consolidation is staged: fund-count exits sell at most this share of the portfolio per review
     minTrimPct: 1.0,           // a partial sale smaller than this share of the portfolio is not worth the transaction and tax
     // Large / Mid / Small reference for the equity, by basket (capBasket: the lower of what risk and horizon allow).
+    // categoryMaxPct (v2.1): the most the funds of one AMFI category may hold together, in % of the whole portfolio,
+    // shared by performance (equal, or bestShare when one of two is clearly better). Large Cap is the core: no cap.
     capBaskets: Object.freeze([
-      Object.freeze({ label: "Conservative", large: 65, mid: 25, small: 10 }),
-      Object.freeze({ label: "Balanced", large: 50, mid: 30, small: 20 }),
-      Object.freeze({ label: "Growth", large: 35, mid: 35, small: 30 }),
+      Object.freeze({ label: "Conservative", large: 65, mid: 25, small: 10, categoryMaxPct: Object.freeze({ "Mid Cap Fund": 15, "Small Cap Fund": 10 }) }),
+      Object.freeze({ label: "Balanced", large: 50, mid: 30, small: 20, categoryMaxPct: Object.freeze({ "Mid Cap Fund": 25, "Small Cap Fund": 15 }) }),
+      Object.freeze({ label: "Growth", large: 35, mid: 35, small: 30, categoryMaxPct: Object.freeze({ "Mid Cap Fund": 30, "Small Cap Fund": 20 }) }),
     ]),
   }),
 });

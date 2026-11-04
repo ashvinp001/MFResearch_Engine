@@ -1,4 +1,60 @@
-# Prosperr — Invest / Hold / Sell Recommendation Logic · v2.0
+# Prosperr — Invest / Hold / Sell Recommendation Logic · v2.3
+
+> **v2.3 (04-Nov-2026, owner's decision). Small funds whose rating is pending are decided on their last year.** A fund
+> with under 3 years of NAVs (REVIEW "young", or held while recovering) that is **below 8% of the portfolio** (all its
+> folios and plans together) gets Hold or Sell instead of waiting for the advisor; 8% or more stays the advisor's call
+> (`fund-grading.js gradeYoungSmall`, config `youngSmallMaxWeightPct` / `youngLaunchHoldPct`):
+>
+> | Record | Hold | Sell |
+> |---|---|---|
+> | 1 year or more | 1Y within 1 pp of the category median or ahead (0.3 pp for debt / arbitrage), not in the bottom quarter | the worst performers — bottom quarter of the category over 1Y (debt / arbitrage: and clearly behind), even if recovering — or more than the gap behind |
+> | 1 year or more, sectoral / thematic | 1Y within 1 pp of its own index or ahead (its peers are other sectors) | further behind its index |
+> | Under a year, equity / sectoral | absolute return since launch **above 15%** | 15% or less |
+> | Under a year, hybrid / debt / arbitrage | 6M (else 3M) within the gap of the category median (a 15% hurdle is an equity return) | further behind |
+>
+> No figure to judge on (no category median, no index, under 3 months) → stays REVIEW: nothing is guessed. Hold is graded
+> MIXED and Sell WEAK, so **Stage 2 then checks the fit** like any fund (a held young fund at or below 5% is still cleaned
+> up; overlap, fund count and limits apply). The peer statistics carry the new `rLaunch` (absolute return from the first
+> NAV, funds under a year only). The PDF says plainly that the rating is pending and what the last year shows.
+>
+> **The only overseas fund is kept, however small** (owner): it is the client's international exposure, so neither the 5%
+> clean-up nor the fund count sells it (as for the only gold, debt or hybrid fund), and the Suggestion Box suggests new
+> money for it, in rupees, to bring it to about 10% of the portfolio (`fit.overseasSuggestPct`).
+
+> **v2.2 (04-Nov-2026, owner's decisions).** Where the money goes, and small holdings:
+> - **Small holdings are cleaned up.** A fund **at or below 5% of the portfolio** (owner: one fixed rule, not by portfolio
+>   size; `fit.cleanupMaxPct`) exits **whatever its own record** — it is too small to change the
+>   result. A good fund is told plainly that this only consolidates the portfolio and is not a view on the fund (screen and
+>   PDF). Kept: units in the ELSS lock-in, a REVIEW fund (the advisor decides), and the only gold / silver, debt or hybrid
+>   fund (selling it would change the asset mix, not only tidy it); where several are that small, the largest stays and the
+>   smaller consolidate into it (least selling and tax). Not counted in the staged fund-count budget.
+> - **The limits are applied first; then the money moves** (§5.4). One plan for all the sales: each fund takes money only
+>   up to its own room (one fund 20% or the equal share, its Mid / Small Cap category, its fund house 25%, its theme, the
+>   index-fund 20%). In order: the fund a sale gave way to → **gold / silver or overseas to the kept fund of its kind, up to
+>   its 15% / 30% limit (gold stays gold); the rest goes on** → a small holding to the INVEST fund of its own category →
+>   the INVEST funds of the same side, equity **a step at a time to the fund that best fills the Large / Mid / Small gap**,
+>   debt to the debt fund furthest below the others → what no fund can take to the Prosperr Recommended Portfolio.
+> - A sale's money can now be **split** (for example "SBI Gold Fund (about 40%) and HDFC Mid Cap Fund (about 60%)"), and the
+>   Suggestion Box ends with **where all the money goes**, in rupees, fund by fund.
+
+> **v2.1 (04-Nov-2026, owner's decisions).** Category allocation at portfolio level, and three corrections:
+> - **Mid Cap and Small Cap funds have a portfolio limit by basket** (all funds of the category together): Conservative
+>   Mid 15% / Small 10%, Balanced 25% / 15%, Growth 30% / 20%. Large Cap is the core and has no cap; Flexi, Multi and
+>   Large & Mid Cap funds are not capped by category. Above the limit the funds share it by performance (equal, or
+>   60 / 40 when one of two is clearly better); an INVEST fund in a category at its limit takes no new money.
+> - **One fund house at most 25%** (was 40%); in a portfolio of fewer than 4 funds, its equal share.
+> - **Money from a sale goes to INVEST funds only while they have room** under the one-fund limit; otherwise to the
+>   Prosperr Recommended Portfolio, so no fund is pushed above its limit by the money from another (§5.4).
+> - **Index-fund tracking:** a missing return to the index's date now means "no tracking figure" (HOLD), never "trails
+>   its index".
+> - A REVIEW fund is still never reduced automatically; the Suggestion Box says so when it keeps a category above its limit.
+> - **Audit fixes (04-Nov-2026, 4 CAS + 2,000 portfolios):** a gold / silver or overseas fund exited because another of
+>   its kind is kept **consolidates into that fund** (gold stays gold; only into a fund not being cut, while its group has
+>   room); sectoral / thematic and gold / overseas INVEST funds are **satellites** and never take the core's proceeds;
+>   among debt and arbitrage funds the **STRONG ones stay first, the larger ones first** (no STRONG debt fund sold to keep a
+>   smaller one); the Suggestion Box names **where new money should go first** when a Large / Mid / Small segment is 10
+>   points or more below the basket (the diversified INVEST fund with most of that segment), or says to add one.
+
 
 > **v2.0 (02-Nov-2026, owner's decisions).** Stage 2 is rebuilt as one decision for the whole portfolio, so no call can
 > contradict another (§5):
@@ -18,7 +74,7 @@
 >   small holdings first, until the count is back in range. A small holding is relative to the portfolio, not fixed.
 > - **Index funds / ETFs**: at most 2 (portfolios whose ideal maximum is ≤ 6 funds) or 3 → the extra ones exit.
 > - **Sectoral / thematic, gold / silver, overseas above 15%** → the weaker fund of that group exits; a fund house
->   above 40% or a theme still above its limit takes no new money (INVEST → HOLD).
+>   above its limit (25% from v2.1) or a theme still above its limit takes no new money (INVEST → HOLD).
 > - **High overlap** now from **50%** (was 60%).
 > - A **Suggestion Box** (screen and PDF) lists the portfolio-level points from the same conditions.
 > - Risk profile / horizon fit is left for the Financial Plan (owner's decision) — not used here.
@@ -298,7 +354,8 @@ Two funds that overlap with no INVEST fund between them are both held; the weake
 | Debt + arbitrage | no limit on the total; very few funds: at most 2 (1 when the ideal maximum is ≤ 4), in equal shares | the strongest stay, the others exit; the money stays in debt when a debt fund is INVEST. Larger funds are cut to the equal share only then, else the box states the target |
 | One fund | 20%, or an equal share when fewer than five funds remain | cut to the limit. Index funds are under their own limit; debt and arbitrage funds are left out, because moving them would change the portfolio's risk |
 | Fund count | the Diversification range: < ₹5L 2–4 · ₹5L–25L 3–6 · ₹25L–1Cr 4–8 · ₹1Cr–5Cr 5–10 · > ₹5Cr 6–13 | exits, staged (below) |
-| Fund house, theme, index funds at their limit | 40% / 15% / 20% | INVEST → **HOLD**, no new money; the next STRONG fund takes its place |
+| Mid Cap / Small Cap funds (v2.1) | by basket, all funds of the category together: Conservative 15% / 10%, Balanced 25% / 15%, Growth 30% / 20%; Large Cap no cap | the funds share the limit by performance (equal, or 60 / 40 when one of two is clearly better); a cut under 1% or a fund that cannot be sold stays and the others give up more, weakest first |
+| Fund house, theme, index funds, Mid / Small Cap at their limit | 25% (equal share below 4 funds) / 15% / 20% / basket | INVEST → **HOLD**, no new money; the next STRONG fund takes its place |
 
 A cut smaller than 1% of the portfolio is not worth the transaction and tax and is left alone (when one index fund's cut is
 too small, the others take it, so index funds still end at 20%). A cut that would leave less than a small holding becomes a
@@ -306,8 +363,10 @@ full exit. A debt or arbitrage fund is never stopped for being above 20%. Units 
 lock-in stays in every count.
 
 **Fund count — the same rule at every size.** One fund at a time exits until the count is in range:
-- **Order:** a small holding (below ¼ of the average share at the ideal maximum) → a fund that overlaps a fund kept →
-  a fund in the part of the equity furthest above the basket (below) → a fund of a fund house above 40% →
+- **v2.2:** small holdings (below ¼ of the average share at the ideal maximum) are already cleaned up before this step,
+  whatever their record (see the v2.2 note at the top); the count then continues:
+- **Order:** a fund that overlaps a fund kept →
+  a fund in the part of the equity furthest above the basket (below) → a fund of a fund house above its limit →
   the weakest in the ranking.
 - **Never:** an INVEST fund; a REVIEW fund; a STRONG fund, unless it is a small duplicate of an INVEST fund; an ELSS
   fund with locked or unknown units; the last hybrid, debt or gold fund.
@@ -326,11 +385,23 @@ is placed in a tier, and the lower tier decides, because either one alone can ru
 It has no hard limit: it steers which fund exits first, and the Suggestion Box shows the basket and the split after the changes.
 Among index funds, the best average tracking difference (fund − index) over 1Y, 3Y and 5Y decides; AUM is not used.
 
-### 5.4 Where the money goes
-To the fund a sale gave way to, when it is INVEST in the final result; else to an INVEST fund **on the same side of the
-portfolio**: equity money to equity funds, debt money to the debt fund furthest below its equal share, so a sale never
-changes the portfolio's risk on its own; else to the Prosperr Recommended Portfolio. When a limit takes an INVEST away, §5.2–§5.3 run again until nothing
-changes, so a sale can never name a fund that is itself sold or closed to new money.
+### 5.4 Where the money goes (v2.2: one plan, after the limits)
+The limits (§5.3) are applied first; then all the money from the sales is placed in one plan (`routeMoney`). A fund takes
+money only up to its **room**: the smallest of the one-fund limit (20%, or the equal share; not index, debt or arbitrage
+funds), its Mid / Small Cap category limit, its fund house limit, its theme limit and, for an index fund, the 20% index
+group. In order:
+
+| # | Money from | Goes to |
+|---|---|---|
+| 1 | a fund that gave way to a stronger fund (same category, index or stocks) | that fund, when it is INVEST, up to its room |
+| 2 | a gold / silver or overseas fund | the kept fund of the same kind (not being cut), up to the 15% / 30% group limit — gold stays gold |
+| 3 | a small holding | the INVEST fund of its own category, up to its room |
+| 4 | everything still to place | the INVEST funds **of the same side** (equity to equity, debt to debt, so a sale never changes the risk on its own). Equity is placed ¼% at a time to the fund whose holdings best fill the segments below the Large / Mid / Small basket (re-read as the money arrives), then the stronger; debt to the debt fund furthest below the others. Sectoral / gold / overseas INVEST funds take only their own group's money |
+| 5 | what no fund can take | the Prosperr Recommended Portfolio |
+
+A sale's money can be split; the call shows each part as a share of the money, and the Suggestion Box ends with the total
+to each fund in rupees. When a limit takes an INVEST away, §5.2–§5.3 run again until nothing changes, so money never goes to
+a fund that is itself sold or closed to new money.
 
 ### 5.5 Suggestion Box (screen and PDF, end of Section 05)
 It reads the same decision and states only what was done: the fund count and how far this review takes it, index funds,
@@ -473,7 +544,9 @@ with concentration flags.
 
 1. **Return gaps:** 1.00 pp for equity / hybrid, 0.30 pp for debt.
 2. **Consistency:** 65% / 40%.
-3. **Concentration:** 20% for one fund, 40% for one fund house, 15% each for thematic, gold-silver and overseas.
+3. **Concentration:** 20% for one fund, 25% for one fund house (v2.1; was 40%), 15% each for thematic and gold-silver, 30% overseas;
+   Mid / Small Cap funds by basket (v2.1): 15 / 10, 25 / 15, 30 / 20 (`fit.capBaskets[].categoryMaxPct`).
+
 4. **Credit quality:** 80% / 60%; unrated above 10% makes Q unknown.
 5. **INVEST guard:** 1Y more than 5 pp behind the category median → HOLD (was 2 pp in v1.0).
 5a. **Benchmark gap:** 1.00 pp (B −); index-fund tracking limit 1.00 pp a year.
