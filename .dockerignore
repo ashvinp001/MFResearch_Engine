@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+.env
+.env.*
+!.env.example
+.secrets
+*.pdf
+serve.ps1
+share-on-lan.ps1
+docs
+tests/pdf-fixtures
+tests/out
+tests/last-results.txt
+CLAUDE.md
+Dockerfile
+.dockerignore
