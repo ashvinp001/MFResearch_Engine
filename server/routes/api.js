@@ -60,21 +60,22 @@ async function latestNav({ res }) {
   }
 }
 
-// /api/scorecard-settings — GET: anyone (the reply says whether this visitor may edit). POST save, /verify and
-// /password: this PC (the owner) only, and the pipeline script also checks the edit password.
+// /api/scorecard-settings — admin only (the admin login; a team login is refused in app.js). GET: the reply
+// says the visitor may edit. POST save, /verify and /password: admin, and the pipeline script also checks the edit password.
 const SETTINGS_COMMANDS = {
   "/api/scorecard-settings": "set",
   "/api/scorecard-settings/verify": "verify",
   "/api/scorecard-settings/password": "password",
 };
-async function scorecardSettings({ req, res, pathname, isLocalPc }) {
+async function scorecardSettings({ req, res, pathname, role }) {
+  const isAdmin = role === "admin";   // the admin login
   try {
     if (req.method === "GET" && pathname === "/api/scorecard-settings") {
-      const { stdout } = await runPipeline("scorecard_settings.py", ["get", `--can-edit=${isLocalPc}`]);
+      const { stdout } = await runPipeline("scorecard_settings.py", ["get", `--can-edit=${isAdmin}`]);
       if (!stdout) throw new Error("scorecard_settings get returned nothing");
       return sendJson(res, 200, stdout);
     }
-    if (req.method !== "POST" || !isLocalPc) {
+    if (req.method !== "POST" || !isAdmin) {
       return sendJson(res, 403, { error: "Only the owner can change the scorecard settings" });
     }
     const body = await readBody(req, LIMITS.settingsBody);

@@ -7,7 +7,7 @@
   <title>Sign in</title>
   <link rel="icon" type="image/png" href="/assets/prosperr-icon.png">
   <style>
-    /* Team sign-in (served by the website server to other computers until they enter the site password). Self-contained. */
+    /* Sign-in (served by the website server to every visitor, this PC included, until they sign in with the admin or team ID). Self-contained. */
     :root { --navy: #14346b; --blue: #2b5aa7; --green: #5aa84f; --lime: #aed495; --text: #18233a; --muted: #5d6a80; --red: #c0453b; }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
@@ -39,9 +39,10 @@
     label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.9); }
     .field { position: relative; }
     input {
-      width: 100%; padding: 12px 44px 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.6);
+      width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.6);
       background: rgba(255, 255, 255, 0.9); color: var(--text); font-size: 15px; outline: none;
     }
+    #password { padding-right: 56px; }
     input:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(174, 212, 149, 0.6); }
     .show { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px; }
     button.go {
@@ -58,20 +59,22 @@
   <main class="glass" role="dialog" aria-labelledby="title" aria-describedby="sub">
     <span class="logo"><img src="/assets/prosperr-logo.png" alt="Prosperr"></span>
     <h1 id="title">Prosperr.io Wealth</h1>
-    <p class="sub" id="sub">Enter the team password to open the website.</p>
+    <p class="sub" id="sub">Sign in with your User ID and password to open the website.</p>
     <form id="form" autocomplete="off">
+      <label for="user">User ID</label>
+      <input id="user" type="text" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" aria-describedby="error">
       <label for="password">Password</label>
       <div class="field">
-        <input id="password" type="password" required autofocus autocomplete="current-password" aria-describedby="error">
+        <input id="password" type="password" required autocomplete="current-password" maxlength="256" aria-describedby="error">
         <button type="button" class="show" id="show" aria-label="Show password">Show</button>
       </div>
       <p class="error" id="error" role="alert"></p>
-      <button class="go" id="go" type="submit">Enter</button>
+      <button class="go" id="go" type="submit">Sign in</button>
     </form>
     <p class="note">Client statements are read in your own browser and are never uploaded.</p>
   </main>
   <script>
-    const form = document.getElementById("form"), input = document.getElementById("password");
+    const form = document.getElementById("form"), user = document.getElementById("user"), input = document.getElementById("password");
     const error = document.getElementById("error"), go = document.getElementById("go"), show = document.getElementById("show");
     show.addEventListener("click", () => {
       const hidden = input.type === "password";
@@ -84,12 +87,17 @@
       error.textContent = "";
       go.disabled = true;
       try {
-        const response = await fetch("/__login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) });
-        if (response.ok) { location.reload(); return; }
-        error.textContent = response.status === 429 ? "Too many attempts. Please wait 10 minutes and try again." : "Incorrect password. Please try again.";
+        const response = await fetch("/__login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: user.value, password: input.value }) });
+        if (response.ok) {
+          // Marks this tab as signed in: the browser drops the mark with the tab, so a closed tab asks again (app/shared/access.js).
+          try { sessionStorage.setItem("prosperr-tab-signed-in", "1"); } catch (e) { /* storage unavailable */ }
+          location.reload();
+          return;
+        }
+        error.textContent = response.status === 429 ? "Too many attempts. Please wait 10 minutes and try again." : "Incorrect User ID or password. Please try again.";
         input.select();
       } catch {
-        error.textContent = "Could not reach the server. Check that you are on the same network.";
+        error.textContent = "Could not reach the server. Check that it is running and that you are on the same network.";
       } finally {
         go.disabled = false;
       }

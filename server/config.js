@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const PIPELINE_DIR = path.join(ROOT, "data-pipeline");
-export const ENV_FILE = path.join(ROOT, ".env");
+// PROSPERR_ENV_FILE: another settings file, for a test server only (never needed in normal use).
+export const ENV_FILE = process.env.PROSPERR_ENV_FILE || path.join(ROOT, ".env");
 export const LOGIN_PAGE = path.join(ROOT, "login.html");
 export const TEST_RESULTS_FILE = path.join(ROOT, "tests", "last-results.txt");
 

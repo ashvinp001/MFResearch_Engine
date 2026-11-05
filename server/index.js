@@ -1,8 +1,9 @@
 // Prosperr website server.
 // Usage:  node server/index.js [--port=5173] [--lan]      (or: npm start / npm run start:lan)
 // Serves the website at http://localhost:<port>/ and its /api endpoints (data from the Python pipeline).
-// --lan: also answers team members on the same private network (http://<this PC's IP>:<port>/), after the
-//   team password; they reach ONLY the website and its /api endpoints. share-on-lan.ps1 opens the firewall.
+// Every visitor, this PC included, signs in first with the admin or team ID (.env).
+// --lan: also answers team members on the same private network (http://<this PC's IP>:<port>/); they reach ONLY the
+//   website and its /api endpoints (team: no Fund Scorecard). share-on-lan.ps1 opens the firewall.
 // If a listener fails after starting (network drop, Wi-Fi reconnect), it is logged and restarted after 3 s.
 import http from "node:http";
 import { DEFAULT_PORT } from "./config.js";

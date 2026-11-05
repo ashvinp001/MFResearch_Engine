@@ -1,12 +1,14 @@
-// The request handler: who is asking → team sign-in (other computers) → dev hooks → API → website files.
+// The request handler: who is asking → sign-in (every visitor, this PC included: admin or team) → dev hooks → API
+// → website files. A team login sees everything except the Fund Scorecard: its settings API is refused here, and
+// the website hides the tab (it asks /api/whoami).
 import { writeFile } from "node:fs/promises";
 import { LIMITS, TEST_RESULTS_FILE } from "./config.js";
-import { readBody, sendText } from "./lib/http.js";
+import { readBody, sendJson, sendText } from "./lib/http.js";
 import { log } from "./lib/logger.js";
 import { clientAddress, isLoopback, isPrivateAddress } from "./lib/network.js";
 import { handleApi } from "./routes/api.js";
 import { serveStatic } from "./routes/static.js";
-import { teamGate } from "./routes/team-auth.js";
+import { ROLES, teamGate } from "./routes/team-auth.js";
 
 export async function handleRequest(req, res) {
   try {
@@ -15,11 +17,18 @@ export async function handleRequest(req, res) {
     if (!isLocalPc && !isPrivateAddress(client)) return sendText(res, 403, "Forbidden");
 
     const url = new URL(req.url, "http://localhost");
-    const ctx = { req, res, client, isLocalPc, pathname: url.pathname, query: url.searchParams };
+    const ctx = { req, res, client, isLocalPc, role: null, pathname: url.pathname, query: url.searchParams };
 
-    if (!isLocalPc && (await teamGate(ctx))) return;
+    // Nothing but the sign-in page opens before a correct ID + password, on this PC too.
+    if (await teamGate(ctx)) return;
 
-    // Dev-only (this PC only): test pages POST their result text here so headless runs can read it.
+    // Who is signed in, for the website (which tabs to show; the sign-out button).
+    if (req.method === "GET" && ctx.pathname === "/api/whoami") return sendJson(res, 200, { role: ctx.role, signedIn: true });
+    if (ctx.role !== ROLES.ADMIN && ctx.pathname.startsWith("/api/scorecard-settings")) {
+      return sendJson(res, 403, { error: "The Fund Scorecard is available to the admin login only" });
+    }
+
+    // Dev-only (this PC, signed in): test pages POST their result text here so headless runs can read it.
     if (isLocalPc && req.method === "POST" && ctx.pathname === "/__test-results") {
       await writeFile(TEST_RESULTS_FILE, await readBody(req, LIMITS.testResultsBody), "utf8");
       return sendText(res, 200, "ok");

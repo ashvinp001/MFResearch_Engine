@@ -2,7 +2,8 @@
  * Website shell — the header and footer shared by every Prosperr page.
  *
  *  SiteHeader({ links: [{ label, href, icon?, accent?, badge? }], cta?: { label, href },
- *               theme?: { value: "light" | "dark", onChange(theme) } }) → { element, setActive(href) }
+ *               theme?: { value: "light" | "dark", onChange(theme) }, account?: { label, onSignOut() } })
+ *      → { element, setActive(href) }
  *      Brand strip on top; logo and colour-coded navigation tabs on the left (accent =
  *      a palette token name such as "green"); optional theme switch and call-to-action
  *      right; menu on mobile.
@@ -13,6 +14,13 @@
 import { h } from "./dom.js";
 import { Logo } from "./basics.js";
 import { Icon } from "./icons.js";
+
+/** Who is signed in (on another computer), with a sign-out button. */
+function AccountChip({ label, onSignOut }) {
+  const button = h("button", { type: "button", class: "site-signout", title: "Sign out" }, "Sign out");
+  button.addEventListener("click", () => { button.disabled = true; onSignOut(); });
+  return h("div", { class: "site-account" }, h("span", { class: "site-account-role" }, Icon("user", { size: 14, strokeWidth: 2 }), label), button);
+}
 
 /** Light / dark switch: an icon button showing the theme it switches TO. */
 function ThemeToggle({ value, onChange }) {
@@ -34,7 +42,7 @@ function ThemeToggle({ value, onChange }) {
   return button;
 }
 
-export function SiteHeader({ links, cta, theme }) {
+export function SiteHeader({ links, cta, theme, account }) {
   const anchors = links.map((link) => h("a", {
     href: link.href,
     class: "site-nav-link",
@@ -54,6 +62,7 @@ export function SiteHeader({ links, cta, theme }) {
       nav,
       h("div", { class: "site-header-actions" },
         theme ? ThemeToggle(theme) : null,
+        account ? AccountChip(account) : null,
         cta ? h("a", { href: cta.href, class: "ds-btn ds-btn-primary ds-btn-sm site-cta" }, cta.label, Icon("arrowRight", { size: 16 })) : null,
         toggle)));
 

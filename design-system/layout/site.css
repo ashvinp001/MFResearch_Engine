@@ -72,6 +72,12 @@
 }
 .site-header-actions { display: flex; align-items: center; justify-self: end; gap: var(--sp-2); }
 .site-cta { text-decoration: none; }
+.site-account { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); }
+.site-account-role { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.site-signout { border: 0; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--color-primary); background: var(--surface-tint-navy); }
+.site-signout:hover { background: var(--navy); color: #fff; }
+.site-signout:disabled { opacity: 0.6; cursor: wait; }
+@media (max-width: 480px) { .site-account-role { display: none; } .site-account { padding-left: 3px; } }
 .site-theme-toggle {
   width: 36px; height: 36px;
   display: grid; place-content: center;
