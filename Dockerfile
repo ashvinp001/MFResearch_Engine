@@ -19,7 +19,8 @@ RUN python3 -m pip install --no-cache-dir -r data-pipeline/requirements.txt
 # The website, the server and the data pipeline (everything else is left out by .dockerignore).
 COPY . .
 
-RUN useradd --system --uid 10001 prosperr && chown -R prosperr /app
+# A home folder for the app user: the data pipeline keeps its local cache under it (~/.cache/Prosperr).
+RUN useradd --system --create-home --home-dir /home/prosperr --uid 10001 prosperr && chown -R prosperr /app
 USER prosperr
 
 EXPOSE 8080

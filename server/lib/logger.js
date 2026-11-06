@@ -8,5 +8,6 @@ try { mkdirSync(path.dirname(LOG_FILE), { recursive: true }); } catch { /* best 
 export function log(text) {
   const now = new Date();
   const stamp = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);   // local time
+  console.log(`${stamp} ${text}`);   // stdout: shows in the container logs (CloudWatch)
   try { appendFileSync(LOG_FILE, `${stamp} ${text}\n`, "utf8"); } catch { /* best effort */ }
 }

@@ -3,6 +3,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { LIMITS, PIPELINE_DIR, PYTHON, ROOT } from "../config.js";
+import { log } from "./logger.js";
 
 let running = 0;
 const waiting = [];
@@ -36,9 +37,11 @@ export async function runPipeline(script, args = [], { input, allowFailure = fal
           windowsHide: true,
           encoding: "utf8",
         },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
           const code = !error ? 0 : typeof error.code === "number" && !error.killed ? error.code : -1;
           const out = (stdout || "").trim();
+          // The script's own error text is kept in the server log (and in container logs), not dropped.
+          if (code !== 0) log(`${script} exit ${code}: ${String(stderr || error.message || "").slice(-1200)}`);
           if (code === 0 || (allowFailure && code > 0)) resolve({ stdout: out, code });
           else reject(new PythonError(`${script} failed (exit ${code})`));
         },
