@@ -105,7 +105,7 @@ The owner edits the settings in a pop-up (`app/pages/fund-scorecard/settings-dia
 | `calculation-engine/research/fund-scorecard.js` | the engine: `scoreCategory`, `backtestCategory`, `fundMeasures` |
 | `app/pages/fund-scorecard-page.js`, `app/pages/fund-scorecard/scorecard-data.js` | the page |
 | `design-system/pages/fund-scorecard.css` | page styles |
-| `data-pipeline/fund_metadata.py` (daily, in `run_daily.ps1`), `fund_metadata_api.py` | AUM, inception and manager from PulseDB `mf/metadata`, up to 20 schemes per request |
+| `data-pipeline/fund_metadata.py` (daily, in `run_daily.py`, GitHub Actions), `fund_metadata_api.py` | AUM, inception and manager from PulseDB `mf/metadata`, up to 20 schemes per request |
 | `data-pipeline/scorecard_settings.py` | owner settings |
 
 ## Planned later layers

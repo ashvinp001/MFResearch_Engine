@@ -207,13 +207,28 @@ def find_amc_id(template: str, scheme_code: int, on_day: date) -> int | None:
     return None
 
 
+def download_history(url: str) -> dict[tuple[int, date], str]:
+    """download() + parse_nav_history(), downloading again when AMFI answers with a damaged or error page
+    (6-Nov-2026: one such page stopped the whole daily run). The last AmfiFormatError is raised when every
+    attempt is damaged — a real format change still stops, it is never guessed around."""
+    last_error: AmfiFormatError | None = None
+    for delay in (0, *RETRY_DELAYS_SECONDS):
+        if delay:
+            time.sleep(delay)
+        try:
+            return parse_nav_history(download(url))
+        except AmfiFormatError as error:
+            last_error = error
+    raise last_error or AmfiFormatError("AMFI NAV history report not available")
+
+
 def scheme_history_from_amfi(template: str, amc_id: int, scheme_code: int, start: date, end: date) -> dict[date, str]:
     """One scheme's full daily NAV history from AMFI's own report, fetched a calendar year at a time."""
     points: dict[date, str] = {}
     year = start.year
     while year <= end.year:
         chunk_start, chunk_end = max(start, date(year, 1, 1)), min(end, date(year, 12, 31))
-        for (code, day), nav in parse_nav_history(download(amc_history_url(template, amc_id, chunk_start, chunk_end))).items():
+        for (code, day), nav in download_history(amc_history_url(template, amc_id, chunk_start, chunk_end)).items():
             if code == scheme_code:
                 points[day] = nav
         year += 1

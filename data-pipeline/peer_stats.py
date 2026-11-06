@@ -1,7 +1,7 @@
 """Peer statistics for the Invest / Hold / Sell logic (Recommendation_Logic.md §2) -> Supabase stats/peer-stats.json.
 
 Usage:
-    python data-pipeline/peer_stats.py             # after the daily update (run_daily.ps1)
+    python data-pipeline/peer_stats.py             # after the daily update (run_daily.py)
     python data-pipeline/peer_stats.py --dry-run   # compute and print a summary; nothing written
 
 For every stored, active scheme whose latest NAV is current (at most STALE_DAYS before AMFI's data date),
@@ -64,6 +64,7 @@ METRICS = ("r3m", "r6m", "r1y", "r3y", "r5y", "sharpe3y", "maxDrawdown3y")
 RECENT_POINTS = 10          # latest NAVs kept with their returns, to match an index whose price arrives later
 MARKET_CODE = "OB56"      # NIFTY 500 (total return) — the broad Indian market, for the sector check
 WORKERS = 12
+MAX_ERROR_SHARE = 0.01    # more funds than this unreadable → nothing is published (the previous file stays live)
 
 
 class Series:
@@ -353,6 +354,11 @@ def main() -> int:
             "leftOut": {"stale": len(schemes) - len(entries), "errors": errors},
             "withBenchmark": with_benchmark, "warnings": warnings,
         }
+        # Never replace good statistics with a partial set (6-Nov-2026: an interrupted NAV update left 3,571 files
+        # unreadable and 276 funds were published). Above the limit the previous file stays live.
+        if len(errors) > MAX_ERROR_SHARE * max(len(entries), 1):
+            raise RuntimeError(f"{len(errors)} of {len(entries)} funds could not be read (limit {MAX_ERROR_SHARE:.0%}) — "
+                               f"statistics NOT published, the previous file stays live. First: {errors[:3]}")
         if not args.dry_run:
             client.upload_json(STATS_PATH, out)
     except (StorageError, settings.SettingsError, RuntimeError) as error:

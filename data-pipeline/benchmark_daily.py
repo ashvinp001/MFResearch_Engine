@@ -1,4 +1,4 @@
-"""Benchmark data, daily update (run by run_daily.ps1 after the fund NAV update) → Supabase benchmark bucket.
+"""Benchmark data, daily update (run by run_daily.py after the fund NAV update) → Supabase benchmark bucket.
 
 Usage:
     python data-pipeline/benchmark_daily.py            # the scheduled run

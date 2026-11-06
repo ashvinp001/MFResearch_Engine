@@ -1,9 +1,9 @@
 // /api/* — market data for the website. Each route validates its input, then asks the Python data
 // pipeline (which reads Supabase / PulseDB with the keys in .env); the browser never sees a key.
-import { readEnv } from "../lib/env.js";
 import { BodyTooLarge, readBody, sendJson } from "../lib/http.js";
 import { log } from "../lib/logger.js";
 import { runPipeline } from "../lib/python.js";
+import { downloadObject } from "../lib/supabase.js";
 import { LIMITS } from "../config.js";
 
 const YEARS = /^([1-9]|1\d|20)$/;
@@ -37,20 +37,7 @@ const navCache = { body: null, at: 0 };
 async function latestNav({ res }) {
   try {
     if (!navCache.body || Date.now() - navCache.at >= LIMITS.latestNavCacheMs) {
-      const env = readEnv();
-      const url = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
-      const key = env.SUPABASE_SERVICE_KEY;
-      const bucket = env.SUPABASE_BUCKET || "mf-data";
-      if (!url.startsWith("https://") || !key) throw new Error("Supabase is not configured in .env");
-      const headers = { apikey: key };
-      if (!key.startsWith("sb_")) headers.Authorization = `Bearer ${key}`;
-      // A unique query string: Supabase's CDN can otherwise serve an earlier copy of the overwritten file.
-      const response = await fetch(`${url}/storage/v1/object/authenticated/${bucket}/nav/latest.json?fresh=${Date.now()}`, {
-        headers,
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) throw new Error(`Supabase answered ${response.status}`);
-      navCache.body = Buffer.from(await response.arrayBuffer());
+      navCache.body = await downloadObject("nav/latest.json");
       navCache.at = Date.now();
     }
     sendJson(res, 200, navCache.body);

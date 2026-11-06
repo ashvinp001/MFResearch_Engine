@@ -9,6 +9,7 @@ import http from "node:http";
 import { DEFAULT_PORT } from "./config.js";
 import { handleRequest } from "./app.js";
 import { log } from "./lib/logger.js";
+import { startSchemeSync } from "./lib/scheme-sync.js";
 
 function parseArgs(argv) {
   const options = { port: DEFAULT_PORT, lan: false };
@@ -49,6 +50,8 @@ function listen(host, required) {
 
 hosts.forEach((host, i) => listen(host, i === 0));
 log(`started (port ${options.port}${options.lan ? ", LAN" : ""}, pid ${process.pid}, node ${process.version})`);
+// The daily data job runs in the cloud; the fund lists it writes to Supabase are copied here (now and every 30 min).
+startSchemeSync();
 
 // One bad request must never stop the site for everyone.
 process.on("uncaughtException", (error) => log(`uncaught: ${error.stack || error.message}`));

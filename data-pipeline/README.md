@@ -83,9 +83,10 @@ by a run on or after that day.
 | History report down | if AMFI's history report answers with something else (seen 22-Oct-2026: a web page for every window), the run continues with AMFI's daily file and logs a WARNING per window; days missed while the PC was off are filled once the report (or a corrected `AMFI_NAV_HISTORY_URL`) works again |
 | New AMFI heading | an unknown section heading stops the run before anything is written (logged as ERROR); any "Life Cycle Fund with Maturity of N Years" heading is excluded automatically (owner's rule: Life Cycle funds are out) |
 | `--reconcile` | re-checks every stored NAV in the window against AMFI (used once after the collection: 1 correction) |
-| Awake | `run_daily.ps1` keeps the PC from idling into sleep while it runs (an idle sleep stopped a step on 23-Oct-2026); closing the lid still sleeps it, and the next run completes the day |
-| Schedule | Windows Task Scheduler "Prosperr NAV daily update" (`schedule_daily.ps1`; runs as soon as the PC is on if 07:00 was missed; logs in `%LOCALAPPDATA%\Prosperr\logs`) |
-| Peer statistics | then `peer_stats.py` (same log): every current fund's 1Y/3Y/5Y, Sharpe, drawdown, rank, E9 quartile and rolling consistency vs its peer group (plan + AMFI category) → `stats/peer-stats.json` (~2 minutes; MF_Calculation_Engine.md E15.5.13) |
+| Schedule | **In the cloud, no PC needed:** GitHub Actions `.github/workflows/daily-data.yml`, once a day at 07:00 IST (01:30 UTC), runs `run_daily.py`. Keys are the repository's Actions secrets `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `PULSE_PARTNER`, `PULSE_KEY`. Logs and a step summary are in the Actions tab; a failed run e-mails the repository owner. Start one by hand: Actions → "Daily data update" → Run workflow (since 6-Nov-2026; the Windows Task Scheduler job was removed) |
+| Order and safety | `run_daily.py`: lists from Supabase → NAVs (3 attempts, 5 min apart) → benchmarks (2) → peer statistics **only when the NAV step succeeded** (2) → fund details (2). A damaged AMFI report page is downloaded again (`amfi_source.download_history`); one new scheme's failure never stops the run; `peer_stats.py` publishes nothing when more than 1% of funds cannot be read, so the previous statistics stay live (6-Nov-2026: an interrupted run had published 276 funds) |
+| Peer statistics | `peer_stats.py`: every current fund's 1Y/3Y/5Y, Sharpe, drawdown, rank, E9 quartile and rolling consistency vs its peer group (plan + AMFI category) → `stats/peer-stats.json` (~2 minutes; MF_Calculation_Engine.md E15.5.13) |
+| Website copy of the lists | the local server copies `schemes/*.json` from Supabase into `data/schemes/` when it starts and every 30 minutes (`server/lib/scheme-sync.js`), so the laptop always shows the lists of the latest cloud run |
 
 ## Benchmark data — own bucket `benchmark-data` (`collect_benchmarks.py`, `benchmark_daily.py`)
 
@@ -146,5 +147,5 @@ returns and risk from these (MF_Calculation_Engine.md E15.5.8–E15.5.9).
 | `benchmark_blends.py` | Our own benchmarks and the category rules (gold / silver / overseas / BAF / Multi Asset) |
 | `collect_benchmarks.py` · `benchmark_daily.py` | One-time benchmark collection (`--sheet`, `--limit`, `--refresh`) · the daily benchmark update |
 | `xlsx_reader.py` | Reads one sheet of an .xlsx (standard library only) — for the owner's reference workbook |
-| `run_daily.ps1` · `schedule_daily.ps1` | Run the daily job with a log · register it in Windows Task Scheduler |
+| `run_daily.py` | The daily job, step by step with retries (run by `.github/workflows/daily-data.yml`; also by hand) |
 | `tests/` | Unit tests for every rule above |

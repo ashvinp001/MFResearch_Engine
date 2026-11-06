@@ -1,7 +1,7 @@
 """Fund details from PulseDB (mf/metadata) -> Supabase stats/fund-metadata.json, for the Fund Scorecard.
 
 Usage:
-    python data-pipeline/fund_metadata.py             # after the daily update (run_daily.ps1)
+    python data-pipeline/fund_metadata.py             # after the daily update (run_daily.py)
     python data-pipeline/fund_metadata.py --dry-run   # fetch and print a summary; nothing written
 
 For every scheme in our AMFI fund lists (Regular, Direct, ETF), requested in batches (mf/metadata with

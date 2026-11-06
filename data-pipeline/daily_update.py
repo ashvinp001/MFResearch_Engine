@@ -30,7 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import settings  # noqa: E402
-from amfi_source import AmfiFormatError, download, nav_history_url, parse_nav_file, parse_nav_history  # noqa: E402
+from amfi_source import AmfiFormatError, download, download_history, nav_history_url, parse_nav_file  # noqa: E402
 from build_universe import build, pulse_plans, refresh_lists  # noqa: E402
 from collect_nav_history import MANIFEST_FIELDS, MIN_INTERVAL_SECONDS, REPORT_PATH, Pacer, collect_one  # noqa: E402
 from nav_history import (  # noqa: E402
@@ -57,7 +57,7 @@ def gap_points(config: dict, start: date, end: date, warnings: list[str]) -> dic
     while chunk_start <= end:
         chunk_end = min(end, chunk_start + timedelta(days=CHUNK_DAYS - 1))
         try:
-            for (code, day), nav in parse_nav_history(download(nav_history_url(template, chunk_start, chunk_end))).items():
+            for (code, day), nav in download_history(nav_history_url(template, chunk_start, chunk_end)).items():
                 points.setdefault(code, {})[day] = nav
         except AmfiFormatError as error:
             warnings.append(f"AMFI NAV history report not available for {chunk_start}..{chunk_end} ({error}); "
@@ -205,7 +205,12 @@ def main() -> int:
             if args.dry_run:
                 new_stored.append(scheme["schemeCode"])
                 continue
-            outcome = collect_one(scheme, ctx)
+            try:
+                outcome = collect_one(scheme, ctx)
+            except Exception as error:  # one new scheme's download problem must never stop the run before the manifest
+                # is written (6-Nov-2026). It is not marked as rejected: the next run tries it again.
+                warnings.append(f"new scheme {scheme['schemeCode']} not collected this run, retried next run: {error!r}")
+                continue
             if outcome["status"] == "stored":
                 stored[scheme["schemeCode"]] = {k: outcome.get(k) for k in MANIFEST_FIELDS}
                 new_stored.append(scheme["schemeCode"])
