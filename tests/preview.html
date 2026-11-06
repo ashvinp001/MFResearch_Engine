@@ -61,13 +61,24 @@
           .filter((h, i) => cycle[i % cycle.length] !== "sell")
           .filter((h, i, list) => list.findIndex((o) => o.isin === h.isin) === i)
           .slice(0, 2);
-        store.state.recommended = {
+        // ?plan=sip or ?plan=both (Lumpsum + SIP, two tables in the report); default lumpsum.
+        const planMode = ["sip", "both"].includes(params.get("plan")) ? params.get("plan") : "lumpsum";
+        const lumpsum = {
           amount: 1000000,
           rows: [
             ...pickable.map((h, i) => ({ fundId: `h:${holdingKey(h)}`, name: h.schemeName, isin: h.isin, pct: i === 0 ? "40" : "33.33" })),
             { fundId: "other", name: "Mirae Asset Large & Midcap Fund - Direct Plan - Growth", isin: "INF769K01BI1", pct: pickable.length === 2 ? "26.67" : "60" },
           ],
         };
+        const sip = {
+          amount: 25000,
+          rows: [
+            { fundId: "other", name: "Mirae Asset Large & Midcap Fund - Direct Plan - Growth", isin: "INF769K01BI1", pct: "60" },
+            ...pickable.slice(0, 1).map((h) => ({ fundId: `h:${holdingKey(h)}`, name: h.schemeName, isin: h.isin, pct: "40" })),
+          ],
+        };
+        const unused = () => ({ amount: null, rows: [{ fundId: "", name: "", isin: "", pct: "" }] });
+        store.state.recommended = { mode: planMode, plans: { lumpsum: planMode === "sip" ? unused() : lumpsum, sip: planMode === "lumpsum" ? unused() : sip } };
       }
       app.goTo(step);
     }

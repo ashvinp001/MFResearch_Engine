@@ -76,6 +76,13 @@
 .dr-kpi.big .dr-kpi-value { font-size: 21px; font-weight: 800; }
 .dr-kpi.tinted { background: linear-gradient(180deg, var(--surface-tint-green), var(--surface) 70%); }
 .dr-kpi.green-value .dr-kpi-value { color: var(--gpos); }
+.dr-kpi.tinted-navy { background: linear-gradient(180deg, var(--surface-tint-blue), var(--surface) 70%); }
+/* The Way Forward with Lumpsum + SIP: a heading and one plain line above each plan's table. */
+.dr-plan-head { margin-top: 18px; padding-left: 10px; border-left: 3px solid var(--green); }
+.dr-plan-head.is-sip { border-left-color: var(--navy); }
+.dr-plan-head .dr-h { margin: 0 0 2px; }
+.dr-plan-head p { margin: 0; font-size: 10px; color: var(--text-secondary); }
+.dr-way.is-plan { margin-top: 8px; }
 
 /* Tables */
 .dr-table { width: 100%; border-collapse: collapse; table-layout: fixed; }

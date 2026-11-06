@@ -17,8 +17,10 @@
  *   overlapApplies: boolean                                                   // false with only one fund: no Portfolio Overlap section
  *   portfolioReturns: [ { period, portfolio, benchmark, excess } ] | null,
  *   risk, coverage,
- *   recommended: { rows: [ { name, isin, pct, amount, category, benchmark, returns } ], blended, amount, totalPct, mode: "lumpsum"|"sip" }
+ *   recommended: { rows: [ { name, isin, pct, amount, category, benchmark, returns } ], blended, amount, totalPct, mode: "lumpsum"|"sip" } | null,
+ *   recommendedPlans: [ recommended… ]   // every plan: one (Lumpsum or SIP) or two (Lumpsum, then SIP); [] when skipped
  * }
+ * allocation: one allocatePortfolio result (with mode) — or allocations: several, one per plan (Lumpsum + SIP).
  * Money in integer paise from the printed CAS values. Fund analytics are passed
  * through from fundData and never estimated; missing values stay null.
  */
@@ -34,7 +36,7 @@ const PERIODS = ["r1y", "r3y", "r5y"];
 
 const byName = (p, q) => p.name.localeCompare(q.name, "en", { sensitivity: "base" });
 
-export function buildDetailedReport({ portfolio, fundData = null, verdicts = {}, allocation = null, suggestions = [], calls = {}, fundHoldings = null }) {
+export function buildDetailedReport({ portfolio, fundData = null, verdicts = {}, allocation = null, allocations = null, suggestions = [], calls = {}, fundHoldings = null }) {
   const snapshot = buildSnapshot(portfolio, fundData);
   const fundInfo = (isin) => fundData?.funds?.[isin] ?? null;
 
@@ -160,7 +162,11 @@ export function buildDetailedReport({ portfolio, fundData = null, verdicts = {},
     portfolioReturns,
     risk: snapshot.risk,
     coverage: snapshot.coverage,
-    recommended: recommendedModel(allocation, rows, fundData),
+    // One plan per allocation (Lumpsum first, then SIP); `recommended` is the first, for the single-plan readers.
+    ...(() => {
+      const plans = (allocations ?? (allocation ? [allocation] : [])).map((a) => recommendedModel(a, rows, fundData)).filter(Boolean);
+      return { recommended: plans[0] ?? null, recommendedPlans: plans };
+    })(),
     suggestions,   // Suggestion Box (autoRecommend flags): [{ id, text }]
     // Folios left with a fraction of a unit (0 < units < 1, owner's rule): listed after Recommended Exits as folios to
     // close — including leftovers too small to count as a holding (cas/normalize.js isNotHeld), which no report shows.

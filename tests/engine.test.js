@@ -620,6 +620,19 @@ test("Detailed report: the recommended portfolio carries Lumpsum or SIP (default
   const mode = (m) => buildDetailedReport({ portfolio: samplePortfolio(), fundData: SAMPLE_FUND_DATA, verdicts: {}, allocation: m === undefined ? allocation : { ...allocation, mode: m } }).recommended.mode;
   eq([mode("sip"), mode("lumpsum"), mode(undefined), mode("weekly")], ["sip", "lumpsum", "lumpsum", "lumpsum"]);
 });
+test("Detailed report: Lumpsum + SIP gives two plans, Lumpsum first, each with its own amount and rows", () => {
+  const lump = allocatePortfolio({ amount: 500000, rows: [{ fundId: "a", name: "Parag Parikh Flexi Cap Fund Direct Plan Growth", isin: "INF879O01027", pct: "100" }] });
+  const sip = allocatePortfolio({ amount: 20000, rows: [
+    { fundId: "a", name: "Parag Parikh Flexi Cap Fund Direct Plan Growth", isin: "INF879O01027", pct: "50" },
+    { fundId: "b", name: "Quant Small Cap Fund Direct Plan Growth", isin: "INF966L01689", pct: "50" },
+  ] });
+  const m = buildDetailedReport({ portfolio: samplePortfolio(), fundData: SAMPLE_FUND_DATA, verdicts: {},
+    allocations: [{ ...lump, mode: "lumpsum" }, { ...sip, mode: "sip" }] });
+  eq(m.recommendedPlans.map((p) => [p.mode, p.amount, p.rows.length]), [["lumpsum", 500000, 1], ["sip", 20000, 2]]);
+  eq(m.recommended.mode, "lumpsum", "first plan is the single-plan view");
+  eq(m.recommendedPlans[1].rows.reduce((t, r) => t + r.amount, 0), 20000, "SIP amounts add up to the SIP");
+  eq(buildDetailedReport({ portfolio: samplePortfolio(), fundData: SAMPLE_FUND_DATA, verdicts: {}, allocations: null }).recommendedPlans, [], "skipped → no plans");
+});
 test("Detailed report: blended return only when every fund has the period", () => {
   const allocation = allocatePortfolio({ amount: 100000, rows: [
     { fundId: "a", name: "Parag Parikh Flexi Cap Fund Direct Plan Growth", isin: "INF879O01027", pct: "50" },

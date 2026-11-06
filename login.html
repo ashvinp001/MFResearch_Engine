@@ -97,7 +97,7 @@
         error.textContent = response.status === 429 ? "Too many attempts. Please wait 10 minutes and try again." : "Incorrect User ID or password. Please try again.";
         input.select();
       } catch {
-        error.textContent = "Could not reach the server. Check that it is running and that you are on the same network.";
+        error.textContent = "Could not reach the server. Check that it is running on this PC.";
       } finally {
         go.disabled = false;
       }

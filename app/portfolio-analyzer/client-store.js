@@ -8,10 +8,11 @@
  *   suggestions: { [holdingKey]: { verdict, status, ruleId, reason, details, notes, … } }, // what the Prosperr logic suggested
  *                (verdict null + status "review" = not pre-selected; the advisor decides)
  *   autoLogic: { version, asOf, flags: [{ id, text }] } | null,  // the automatic logic's run (null = not available)
- *   recommended: { amount: number|null, mode: "lumpsum" | "sip" (one-time amount or monthly SIP; older saves = lumpsum),
- *                rows: [ { fundId, name, isin, pct } ], basketId?: model-portfolio id applied,
- *                rowsBeforeBasket?: rows to restore when the model is deselected,
+ *   recommended: { mode: "lumpsum" | "sip" | "both" (one-time amount, monthly SIP, or a lumpsum AND a monthly SIP),
+ *                plans: { lumpsum: Plan, sip: Plan } — each kept separately, so switching the mode never loses either,
  *                skipped?: true when the advisor skipped this step (report leaves out The Way Forward) },
+ *     Plan = { amount: number|null, rows: [ { fundId, name, isin, pct } ], basketId?: model-portfolio id applied,
+ *              rowsBeforeBasket?: rows to restore when the model is deselected },
  *   acknowledged: boolean,   // advisor confirmed flagged figures were checked
  * }
  * Nothing is written to the browser: a refresh, Home, or a new upload always
@@ -37,6 +38,16 @@ export function emptyRow() {
   return { fundId: "", name: "", isin: "", pct: "" };
 }
 
+export function emptyPlan() {
+  return { amount: null, rows: [emptyRow()] };
+}
+
+/** The plans in use for the chosen mode, in report order: Lumpsum first, then SIP → [{ mode, plan }]. */
+export function activePlans(recommended) {
+  const modes = recommended.mode === "both" ? ["lumpsum", "sip"] : [recommended.mode === "sip" ? "sip" : "lumpsum"];
+  return modes.map((mode) => ({ mode, plan: recommended.plans[mode] }));
+}
+
 /** Remove choices saved by earlier versions of the app. */
 export function clearSavedClientData() {
   try {
@@ -56,7 +67,7 @@ export function openClientStore(portfolio) {
       verdicts: {},
       suggestions: {},
       autoLogic: null,
-      recommended: { amount: null, mode: "lumpsum", rows: [emptyRow()] },
+      recommended: { mode: "lumpsum", plans: { lumpsum: emptyPlan(), sip: emptyPlan() } },
       acknowledged: false,
     },
     save() {

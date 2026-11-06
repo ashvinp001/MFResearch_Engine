@@ -65,6 +65,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 export function sourceNote(model, { amountsNote = false } = {}) {
   const date = model.asOf ? formatDate(model.asOf) : "";
   const lead = !amountsNote ? ""
+    : (model.recommendedPlans?.length ?? 0) > 1 ? "Lumpsum amounts are the one-time amount × allocation; Monthly SIP amounts are the monthly SIP amount × allocation (invested every month). "
     : model.recommended?.mode === "sip" ? "Amounts are the monthly SIP amount × allocation (invested every month). "
     : "Amounts are the lumpsum (one-time) amount × allocation. ";
   if (!model.portfolioReturns && !model.risk) {

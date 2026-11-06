@@ -170,6 +170,29 @@
 .bld-mode-btn[aria-pressed="true"] { color: #fff; }
 .bld-mode-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .bld-mode-thumb { transition: none; } }
+/* Three options: Lumpsum · SIP · Lumpsum + SIP (the thumb is a third wide). */
+.bld-mode.is-three { grid-template-columns: repeat(3, 1fr); }
+.bld-mode.is-three .bld-mode-thumb { width: calc((100% - 8px) / 3); }
+.bld-mode.is-three[data-mode="sip"] .bld-mode-thumb { transform: translateX(100%); }
+.bld-mode.is-three[data-mode="both"] .bld-mode-thumb { transform: translateX(200%); background: linear-gradient(135deg, #3f8a3a, #2b5aa7);
+  box-shadow: 0 4px 10px rgba(43, 90, 167, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+.bld-mode.is-three .bld-mode-btn { min-width: 120px; }
+.bld-mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; padding: 18px 24px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
+.bld-mode-text { display: grid; gap: 4px; min-width: 0; }
+.bld-mode-hint { font-size: 13px; color: var(--text-secondary); }
+/* The switch sits at the far right; with Lumpsum + SIP the one Model Portfolio button sits under it, same width. */
+.bld-mode-right { margin-left: auto; display: grid; gap: 12px; justify-items: stretch; }
+.bld-shared-model:empty { display: none; }
+.bld-shared-model .bld-model-btn { width: 100%; margin-left: 0; justify-content: center; }
+/* Each plan is its own block; with Lumpsum + SIP a heading names it (green = lumpsum, navy = SIP, as in the switch). */
+.bld-plan + .bld-plan { border-top: 6px solid var(--surface-alt); }
+.bld-plan-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0; }
+.bld-plan-head strong { font-family: var(--font-display); font-size: 17px; color: var(--color-primary); }
+.bld-plan-head > span:last-child { font-size: 13px; color: var(--text-secondary); }
+.bld-plan-icon { display: grid; place-content: center; width: 30px; height: 30px; border-radius: 9px; color: #fff; background: linear-gradient(135deg, #3f8a3a, #5aa84f); }
+.bld-plan.is-sip .bld-plan-icon { background: linear-gradient(135deg, #14346b, #2b5aa7); }
+.bld-previews { display: grid; gap: var(--sp-4); }
+@media (max-width: 640px) { .bld-mode.is-three .bld-mode-btn { min-width: 0; padding: 8px 10px; } }
 /* Model Portfolio button — sits at the far right of the amount row */
 .bld-model-btn {
   --model-accent: var(--blue);
@@ -385,6 +408,15 @@ button.fin-cover-art:hover .fin-cover-hover, button.fin-cover-art:focus-visible 
 .rec-tool[aria-pressed="true"] .rec-switch i { transform: translateX(20px); }
 .rec-tool:disabled .rec-switch { display: none; }
 .rec-plan-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 24px; font-family: var(--font-display); font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-info); background: var(--surface-tint-blue); border-top: 1px solid var(--border); }
+/* Sort tabs (Step 3): AMC · Category · Allocation, between the panel heading and the column titles.
+   Click: A–Z, again: Z–A, again: off. The active tab is filled navy with its direction. */
+.rec-sorts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.rec-sorts-label { margin-right: 4px; font-family: var(--font-display); font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.rec-sort-tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); color: var(--text-primary); font-family: var(--font-display); font-size: 13.5px; font-weight: 700; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
+.rec-sort-tab:hover { border-color: var(--color-info); }
+.rec-sort-tab:focus-visible { outline: 2px solid var(--color-info); outline-offset: 2px; }
+.rec-sort-tab.is-on { background: var(--fill-primary); border-color: var(--fill-primary); color: var(--on-dark-primary); }
+.rec-sort-dir { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--lime); }
 .rec-plan-total { letter-spacing: 0.04em; text-transform: none; font-size: 13px; color: var(--text-secondary); }
 .rec-plan-total strong { font-size: 14px; color: var(--color-primary); }
 .rec-plan { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-badge); font-weight: 700; letter-spacing: 0.04em; vertical-align: middle; }

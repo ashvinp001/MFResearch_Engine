@@ -1,8 +1,7 @@
 # Starts the Prosperr website server (Node.js: server/index.js). Same usage as before:
-#   powershell -ExecutionPolicy Bypass -File serve.ps1 [-Port 5173] [-Lan]
-# Serves http://localhost:<Port>/ and its /api endpoints (data from the Python pipeline, keys from .env).
-# -Lan: also answers team members on the same local network after the team password (run share-on-lan.ps1 once).
-param([int]$Port = 5173, [switch]$Lan)
+#   powershell -ExecutionPolicy Bypass -File serve.ps1 [-Port 5173]
+# Serves http://localhost:<Port>/ (this PC only) and its /api endpoints (data from the Python pipeline, keys from .env).
+param([int]$Port = 5173)
 
 function Find-Node {
   $onPath = Get-Command node -ErrorAction SilentlyContinue
@@ -27,7 +26,6 @@ if (-not $node) {
   exit 1
 }
 $serverArgs = @((Join-Path $PSScriptRoot "server\index.js"), "--port=$Port")
-if ($Lan) { $serverArgs += "--lan" }
 Set-Location $PSScriptRoot
 & $node @serverArgs
 exit $LASTEXITCODE
