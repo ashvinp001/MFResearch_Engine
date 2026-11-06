@@ -36,7 +36,7 @@ import { createReviewScreen } from "./screens/review-screen.js";
 import { createRecommendationScreen } from "./screens/recommendation-screen.js";
 import { createBuilderScreen } from "./screens/builder-screen.js";
 import { createFinalScreen } from "./screens/final-screen.js";
-import { clearSavedClientData, openClientStore } from "./client-store.js";
+import { activePlans, clearSavedClientData, openClientStore } from "./client-store.js";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
 
@@ -113,13 +113,16 @@ export function mountPortfolioAnalyzer(container) {
 
   // ---------- derived state (engine) ----------
   const recommendationOf = () => summarizeRecommendations(session.portfolio, session.store.state.verdicts, session.store.state.suggestions ?? {});
-  const allocationOf = () => allocatePortfolio({ amount: session.store.state.recommended.amount, rows: session.store.state.recommended.rows });
+  // One allocation per plan in use (Lumpsum, SIP, or both — Lumpsum first), each tagged with its mode.
+  const allocationsOf = () => activePlans(session.store.state.recommended)
+    .map(({ mode, plan }) => ({ ...allocatePortfolio({ amount: plan.amount, rows: plan.rows }), mode }));
+  const allocationsComplete = () => allocationsOf().every((allocation) => allocation.complete);
   const portfolioSkipped = () => Boolean(session.store.state.recommended.skipped);
 
   function reachableStep() {
     if (!session) return 0;
     if (!recommendationOf().complete) return 2;
-    if (!allocationOf().complete && !portfolioSkipped()) return 3;
+    if (!allocationsComplete() && !portfolioSkipped()) return 3;
     return 4;
   }
 
@@ -410,18 +413,18 @@ export function mountPortfolioAnalyzer(container) {
       screen = createBuilderScreen({ portfolio, summary, store, recommendation: recommendationOf(), allocate: allocatePortfolio, onChange, searchFunds });
     } else {
       const recommendation = recommendationOf();
-      const allocation = allocationOf();
-      // Only a complete portfolio goes into the report; otherwise the step was skipped.
-      const included = allocation.complete;
-      if (included) loadRecommendedFundData(store.state.recommended.rows);
+      const allocations = allocationsOf();
+      // Only a complete portfolio (every plan in use at 100%) goes into the report; otherwise the step was skipped.
+      const included = allocations.every((allocation) => allocation.complete);
+      if (included) loadRecommendedFundData(activePlans(store.state.recommended).flatMap(({ plan }) => plan.rows));
       finalScreen = createFinalScreen({
-        model: buildDetailedReport({ portfolio, fundData: session.fundData, verdicts: store.state.verdicts, allocation: included ? { ...allocation, mode: store.state.recommended.mode === "sip" ? "sip" : "lumpsum" } : null,
+        model: buildDetailedReport({ portfolio, fundData: session.fundData, verdicts: store.state.verdicts, allocations: included ? allocations : null,
           suggestions: store.state.autoLogic?.flags ?? [], calls: store.state.suggestions ?? {},
           fundHoldings: session.fundData?.autoInputs?.fundHoldings ?? null }),
         notes: returnNotes(portfolio, session.fundData),
         portfolio,
         recommendation,
-        allocation,
+        allocations,
         skipped: !included,
         profile: session.profile,
         store,
@@ -455,17 +458,18 @@ export function mountPortfolioAnalyzer(container) {
         tone: recommendation.complete ? "positive" : "warning",
       });
     } else if (current === 3) {
-      const allocation = allocationOf();
-      actionBar.update(allocation.complete
+      const both = session.store.state.recommended.mode === "both";
+      actionBar.update(allocationsComplete()
         ? {
             backLabel: "Recommendation", onBack: () => goTo(2),
             nextLabel: "Final review", onNext: () => goTo(4),
-            message: "Portfolio complete — 100% allocated.", tone: "positive",
+            message: both ? "Lumpsum and SIP portfolios complete — each 100% allocated." : "Portfolio complete — 100% allocated.", tone: "positive",
           }
         : {
             backLabel: "Recommendation", onBack: () => goTo(2),
             nextLabel: "Skip this step", nextIcon: "arrowRight", onNext: skipPortfolio,
-            message: "Portfolio not complete yet — finish it, or skip this step to leave it out of the report.",
+            message: both ? "Lumpsum and SIP portfolios must each total 100% — finish both, or skip this step to leave it out of the report."
+              : "Portfolio not complete yet — finish it, or skip this step to leave it out of the report.",
             tone: "warning",
           });
     } else if (current === 4 && finalScreen) {

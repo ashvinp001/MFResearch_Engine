@@ -14,7 +14,7 @@ Requirements: Node.js 20+ (`winget install OpenJS.NodeJS.LTS`), Python 3.12 for 
 (`pip install -r data-pipeline/requirements.txt`), and a modern browser (Edge or Chrome). No npm packages are needed.
 
 ```powershell
-npm start                 # or: npm run start:lan  (team members on the local network)
+npm start                 # the website on this PC only (sign-in with the admin or team ID)
 # Start hidden in the background (no window)
 Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PWD\serve.ps1`""
 ```
@@ -37,12 +37,12 @@ app/                  Thin glue: routing, pages, and the Portfolio Analyzer work
 server/               Node.js web server (port 5173): website files, /api routes, team sign-in, security
   config.js           Paths, limits, which files may be served
   app.js              Request handler: access check → sign-in → API → files
-  routes/             api.js (market data), static.js (website files), team-auth.js (LAN password)
+  routes/             api.js (market data), static.js (website files), team-auth.js (admin / team sign-in)
   lib/                env, logging, network, HTTP and Python-runner helpers
   tests/              Server unit tests (npm test)
 data-pipeline/        Python: all heavy data work — AMFI/PulseDB collection, NAVs, benchmarks, peer stats, Supabase
 config/               Owner settings written by the server (never served)
-serve.ps1             Starts the server (finds Node.js); share-on-lan.ps1 opens it to the local network
+serve.ps1             Starts the server (finds Node.js)
 assets/               Logo files
 docs/                 Architecture and feature documentation
 tests/                Browser-run unit tests, end-to-end PDF tests and visual tools

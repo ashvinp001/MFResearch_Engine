@@ -21,8 +21,9 @@ export const PYTHON = process.env.PYTHON || (existsSync(usualPython) ? usualPyth
 
 export const DEFAULT_PORT = 5173;
 
-// What another computer on the network may open (everything else answers 404 for them).
-export const LAN_ALLOWED =
+// What a visitor that is not this PC may open — possible only inside the Docker container (--container); a PC serves
+// localhost alone. Everything else answers 404 for them.
+export const REMOTE_ALLOWED =
   /^(index\.html|app\/.+\.js|design-system\/.+\.(js|css)|calculation-engine\/.+\.js|assets\/[^/]+\.(png|svg|ico)|data\/schemes\/[a-z]+\.json)$/;
 // Never served to anyone: dot-files (.env, .git), the data pipeline, the server, owner settings, local-only notes.
 export const PRIVATE_PATH =

@@ -4,7 +4,7 @@
  * checklist that must pass before download. The download is the replica of
  * "Portfolio Review & Recommendation" (US Letter), saved via the browser's PDF.
  *
- * Input:  { model (engine buildDetailedReport), portfolio, recommendation, allocation,
+ * Input:  { model (engine buildDetailedReport), portfolio, recommendation, allocations (one per plan: Lumpsum and/or SIP),
  *           skipped (true when the recommended portfolio step was skipped),
  *           profile (engine buildReportProfile — pre-fills the report details), store, onGoTo(step), onChange() }
  * Output: { element, canDownload(), download() }
@@ -22,8 +22,9 @@ import { autoDetails, autoNote } from "../report-profile-notes.js";
 import { signedPct, signedWhole } from "../reports/snapshot-format.js";
 
 const STEP = { REVIEW: 1, RECOMMENDATION: 2, BUILDER: 3 };
+const PLAN_NAME = { lumpsum: "Lumpsum", sip: "Monthly SIP" };
 
-export function createFinalScreen({ model, portfolio, recommendation, allocation, skipped = false, profile = null, store, onGoTo, onChange, notes = [] }) {
+export function createFinalScreen({ model, portfolio, recommendation, allocations = [], skipped = false, profile = null, store, onGoTo, onChange, notes = [] }) {
   // Report details come from the Prosperr logic (engine buildReportProfile) and are locked: nobody can change them.
   // Where the logic cannot decide, the report shows "—".
   const details = store.state.reportDetails = { ...autoDetails(profile) };
@@ -64,23 +65,28 @@ export function createFinalScreen({ model, portfolio, recommendation, allocation
           detail: "The report will not include The Way Forward (Prosperr Recommended Portfolio).",
           fix: { label: "Add a recommended portfolio", step: STEP.BUILDER },
         }]
-      : [
-          {
-            title: "Recommended portfolio totals 100%",
-            ok: () => allocation.complete,
-            detail: allocation.complete
-              ? `${formatInr(allocation.amount)} fully allocated across ${allocation.rows.length} fund(s).`
-              : "Amount, funds or allocations are incomplete.",
-            fix: allocation.complete ? null : { label: "Complete portfolio", step: STEP.BUILDER },
-          },
-          {
-            title: "Allocated amounts add up exactly",
-            ok: () => allocation.complete && allocation.allocatedAmount === allocation.amount,
-            detail: allocation.complete
-              ? `Fund amounts total ${formatInr(allocation.allocatedAmount)} — exactly the amount to invest.`
-              : "Shown once the portfolio is complete.",
-          },
-        ]),
+      // One pair of checks per plan (Lumpsum, Monthly SIP), named when there are two.
+      : allocations.flatMap((allocation) => {
+          const name = allocations.length > 1 ? `${PLAN_NAME[allocation.mode]} portfolio` : "Recommended portfolio";
+          const amountWord = allocation.mode === "sip" ? "the monthly SIP amount" : "the amount to invest";
+          return [
+            {
+              title: `${name} totals 100%`,
+              ok: () => allocation.complete,
+              detail: allocation.complete
+                ? `${formatInr(allocation.amount)}${allocation.mode === "sip" ? " a month" : ""} fully allocated across ${allocation.rows.length} fund(s).`
+                : "Amount, funds or allocations are incomplete.",
+              fix: allocation.complete ? null : { label: "Complete portfolio", step: STEP.BUILDER },
+            },
+            {
+              title: `${allocations.length > 1 ? `${PLAN_NAME[allocation.mode]}: a` : "A"}llocated amounts add up exactly`,
+              ok: () => allocation.complete && allocation.allocatedAmount === allocation.amount,
+              detail: allocation.complete
+                ? `Fund amounts total ${formatInr(allocation.allocatedAmount)} — exactly ${amountWord}.`
+                : "Shown once the portfolio is complete.",
+            },
+          ];
+        })),
     {
       title: "Report reviewed",
       ok: () => reviewed,
@@ -285,7 +291,10 @@ function sectionCards(model, recommendation) {
     {
       code: "→", title: "The Way Forward", icon: "sparkle", status: rec?.rows.length ? "ready" : "skipped",
       text: "The Prosperr Recommended Portfolio with amounts and why each fund was chosen.",
-      facts: rec ? [rec.mode === "sip" ? `Monthly SIP ${formatInr(rec.amount, { whole: true })}` : `Lumpsum ${formatInr(rec.amount, { whole: true })}`, `${rec.rows.length} funds`, `${rec.totalPct}% allocated`] : ["Skipped — not included in the report"],
+      facts: !rec ? ["Skipped — not included in the report"]
+        : (model.recommendedPlans?.length ?? 0) > 1
+          ? [...model.recommendedPlans.map((p) => `${p.mode === "sip" ? "Monthly SIP" : "Lumpsum"} ${formatInr(p.amount, { whole: true })} · ${p.rows.length} funds`), "Two tables: Lumpsum and SIP"]
+          : [rec.mode === "sip" ? `Monthly SIP ${formatInr(rec.amount, { whole: true })}` : `Lumpsum ${formatInr(rec.amount, { whole: true })}`, `${rec.rows.length} funds`, `${rec.totalPct}% allocated`],
     },
   ];
   // No Portfolio Overlap section (one fund, or no stock-level holdings for two funds): the sections after it move up

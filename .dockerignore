@@ -7,7 +7,6 @@ node_modules
 .secrets
 *.pdf
 serve.ps1
-share-on-lan.ps1
 docs
 tests/pdf-fixtures
 tests/out

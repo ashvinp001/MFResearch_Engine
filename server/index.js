@@ -1,9 +1,9 @@
 // Prosperr website server.
-// Usage:  node server/index.js [--port=5173] [--lan]      (or: npm start / npm run start:lan)
-// Serves the website at http://localhost:<port>/ and its /api endpoints (data from the Python pipeline).
-// Every visitor, this PC included, signs in first with the admin or team ID (.env).
-// --lan: also answers team members on the same private network (http://<this PC's IP>:<port>/); they reach ONLY the
-//   website and its /api endpoints (team: no Fund Scorecard). share-on-lan.ps1 opens the firewall.
+// Usage:  node server/index.js [--port=5173]      (or: npm start)
+// Serves the website at http://localhost:<port>/ — this PC only — and its /api endpoints (data from the Python pipeline).
+// Every visitor signs in first with the admin or team ID (.env). Sharing over the local network was removed (2026-11-06).
+// --container: only inside the Docker image (Dockerfile) — listens on the container's own network so Docker's port
+//   mapping can reach it; never used on a PC.
 // If a listener fails after starting (network drop, Wi-Fi reconnect), it is logged and restarted after 3 s.
 import http from "node:http";
 import { DEFAULT_PORT } from "./config.js";
@@ -12,9 +12,9 @@ import { log } from "./lib/logger.js";
 import { startSchemeSync } from "./lib/scheme-sync.js";
 
 function parseArgs(argv) {
-  const options = { port: DEFAULT_PORT, lan: false };
+  const options = { port: DEFAULT_PORT, container: false };
   for (const arg of argv) {
-    if (arg === "--lan") options.lan = true;
+    if (arg === "--container") options.container = true;
     else if (/^--port=\d{1,5}$/.test(arg)) options.port = Number(arg.slice(7));
     else throw new Error(`Unknown option: ${arg}`);
   }
@@ -23,9 +23,9 @@ function parseArgs(argv) {
 }
 
 const options = parseArgs(process.argv.slice(2));
-// Local only: both loopback addresses (browsers may try either for "localhost"). LAN: every interface.
+// This PC only: both loopback addresses (browsers may try either for "localhost"). In a container: its own network.
 // The first address is required; the IPv6 one is skipped on a PC without IPv6.
-const hosts = options.lan ? ["0.0.0.0", "::"] : ["127.0.0.1", "::1"];
+const hosts = options.container ? ["0.0.0.0", "::"] : ["127.0.0.1", "::1"];
 
 function listen(host, required) {
   const server = http.createServer(handleRequest);
@@ -44,12 +44,12 @@ function listen(host, required) {
   });
   server.listen({ port: options.port, host, ipv6Only: true }, () => {
     started = true;
-    if (required) console.log(`Prosperr website: http://localhost:${options.port}/${options.lan ? " (also on the local network)" : ""}`);
+    if (required) console.log(`Prosperr website: http://localhost:${options.port}/`);
   });
 }
 
 hosts.forEach((host, i) => listen(host, i === 0));
-log(`started (port ${options.port}${options.lan ? ", LAN" : ""}, pid ${process.pid}, node ${process.version})`);
+log(`started (port ${options.port}${options.container ? ", container" : ""}, pid ${process.pid}, node ${process.version})`);
 // The daily data job runs in the cloud; the fund lists it writes to Supabase are copied here (now and every 30 min).
 startSchemeSync();
 

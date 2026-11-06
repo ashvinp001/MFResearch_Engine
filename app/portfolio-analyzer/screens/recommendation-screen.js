@@ -17,6 +17,7 @@ import { Icon } from "../../../design-system/components/icons.js";
 import { VerdictToggle } from "../../../design-system/components/workflow.js";
 import { STATUS } from "../../../design-system/tokens.js";
 import { holdingKey } from "../../../calculation-engine/index.js";
+import { groupFromMix } from "../../../calculation-engine/portfolio-analyzer/portfolio-performance.js";
 import { buildCommentary } from "../commentary.js";
 import { DASH, formatDate, formatInr, formatSignedInr, formatSignedPct } from "../../shared/format.js";
 import { pageBand } from "../../shared/page-band.js";
@@ -24,6 +25,15 @@ import { pageBand } from "../../shared/page-band.js";
 const VERDICT_NAME = { invest: "Invest", hold: "Hold", sell: "Sell" };
 const PLAN_ORDER = ["Regular", "Direct", "ETF"];
 const PLAN_HEADING = { Regular: "Regular plans", Direct: "Direct plans", ETF: "ETFs" };
+// Sort tabs: allocation in the report's groups (same rule as Section 03: AMFI class, else the fund's own holdings).
+const ALLOCATION_LABEL = { equity: "Equity", hybrid: "Hybrid", debt: "Debt", goldSilver: "Gold / Silver", other: "Other" };
+const CATEGORY_SHORT = { "Balanced Advantage / Dynamic Asset Allocation": "Balanced Advantage" };
+const NOT_KNOWN = { amc: "AMC not known", category: "Category not known" };
+const SORTS = [
+  { field: "amc", label: "AMC" },
+  { field: "category", label: "Category" },
+  { field: "allocation", label: "Allocation" },
+];
 
 /** Regular / Direct / ETF — from the AMFI list when the fund is in it, else from the plan named in the fund name. */
 function planOf(holding, info) {
@@ -127,7 +137,13 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
         gain?.gainPct === null || gain?.gainPct === undefined ? DASH : formatSignedPct(gain.gainPct),
         gain ? h("span", { class: "rec-metric-sub" }, formatSignedInr(gain.gain, { whole: true })) : null),
       toggle, bulb);   // the bulb sits in the row's top-right corner (CSS), outside the column grid
-    return { element, plan, key, value: Number(holding.marketValue) || 0 };   // value: current value, as on the row
+    return {
+      element, plan, key, value: Number(holding.marketValue) || 0,   // value: current value, as on the row
+      // What the sort tabs read (AMC, category, allocation); a missing value is its own "not known" group, listed last.
+      amc: holding.amc?.trim() || NOT_KNOWN.amc,
+      category: info?.category ? (CATEGORY_SHORT[info.category] ?? info.category) : NOT_KNOWN.category,
+      allocation: ALLOCATION_LABEL[info?.assetClass ?? groupFromMix(info?.assetMix) ?? "other"] ?? ALLOCATION_LABEL.other,
+    };
   });
 
   // Toolbar above the list: group by plan (Regular first, then Direct, then ETFs; off = the statement's own
@@ -176,6 +192,45 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
         portfolioValue ? ` · ${((total / portfolioValue) * 100).toFixed(1)}% of portfolio` : ""));
   }
 
+  // Sort tabs (AMC, Category, Allocation): a click lists the funds by that field A → Z, a second click Z → A, a third
+  // click goes back to the statement's order. Only this list changes — summary, commentary and report are untouched.
+  // Kept for this visit only. "Not known" values always come last.
+  const sortBy = { field: null, dir: 1 };
+  const unknown = (v) => Object.values(NOT_KNOWN).includes(v) || v === ALLOCATION_LABEL.other;
+  const compareValues = (a, b) => (unknown(a) !== unknown(b) ? (unknown(a) ? 1 : -1) : sortBy.dir * a.localeCompare(b));
+  // Within one value: largest current value first (fund name as the tie-break), so the order is stable.
+  const sortRows = (list) => (sortBy.field
+    ? [...list].sort((p, q) => compareValues(p[sortBy.field], q[sortBy.field]) || q.value - p.value || p.element.textContent.localeCompare(q.element.textContent))
+    : list);
+  const tabs = SORTS.map(({ field, label }) => {
+    const tab = h("button", { type: "button", class: "rec-sort-tab", onclick: () => {
+      if (sortBy.field !== field) Object.assign(sortBy, { field, dir: 1 });
+      else if (sortBy.dir === 1) sortBy.dir = -1;
+      else sortBy.field = null;
+      renderRows();
+    } });
+    return { field, label, tab };
+  });
+  const sortBar = h("div", { class: "rec-sorts", role: "toolbar", "aria-label": "Sort the funds" },
+    h("span", { class: "rec-sorts-label" }, "Sort by"), ...tabs.map((t) => t.tab));
+  function paintTabs() {
+    for (const { field, label, tab } of tabs) {
+      const on = sortBy.field === field;
+      tab.classList.toggle("is-on", on);
+      tab.setAttribute("aria-pressed", String(on));
+      tab.title = !on ? `Sort by ${label}, A to Z` : sortBy.dir === 1 ? `Sorted A to Z · click for Z to A` : `Sorted Z to A · click to clear`;
+      tab.replaceChildren(label, ...(on ? [h("span", { class: "rec-sort-dir" }, Icon(sortBy.dir === 1 ? "arrowUp" : "arrowDown", { size: 13 }), sortBy.dir === 1 ? "A–Z" : "Z–A")] : []));
+    }
+  }
+  /** Heading above each AMC / category / allocation: its funds and their value (share of the portfolio). */
+  function valueHeading(value, members) {
+    const total = members.reduce((sum, row) => sum + row.value, 0);
+    return h("div", { class: "rec-plan-group is-sort" },
+      h("span", {}, `${value} · ${members.length} fund${members.length > 1 ? "s" : ""}`),
+      h("span", { class: "rec-plan-total" }, h("strong", { class: "ds-num" }, formatInr(total, { whole: true })),
+        portfolioValue ? ` · ${((total / portfolioValue) * 100).toFixed(1)}% of portfolio` : ""));
+  }
+
   function renderRows() {
     const grouped = Boolean(store.state.groupByPlan);
     planToggle.setAttribute("aria-pressed", String(grouped));
@@ -183,7 +238,16 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
       grouped ? "Listed as Regular, then Direct" : "Group the list by plan"));
     planToggle.title = grouped ? "Click to show the normal list" : "Arrange the funds as Regular plans, then Direct plans";
     updateUnratedToggle();
-    const visible = onlyUnrated ? rows.filter((row) => unratedKeys.has(row.key)) : rows;
+    paintTabs();
+    const visible = sortRows(onlyUnrated ? rows.filter((row) => unratedKeys.has(row.key)) : rows);
+    // Sorted and not grouped by plan: a heading over each AMC / category / allocation.
+    if (!grouped && sortBy.field) {
+      const values = [...new Set(visible.map((row) => row[sortBy.field]))];
+      return rowsSlot.replaceChildren(...values.flatMap((value) => {
+        const members = visible.filter((row) => row[sortBy.field] === value);
+        return [valueHeading(value, members), ...members.map((row) => row.element)];
+      }));
+    }
     if (!grouped) return rowsSlot.replaceChildren(...visible.map((row) => row.element));
     rowsSlot.replaceChildren(...PLAN_ORDER.flatMap((plan) => {
       const members = visible.filter((row) => row.plan === plan);
@@ -229,6 +293,7 @@ export function createRecommendationScreen({ portfolio, fundData, store, summari
                 + (reviewCount ? `. ${reviewCount === 1 ? "1 fund needs" : `${reviewCount} funds need`} your call.` : ".")
                 + " Tap the bulb on any fund to see why, and change any call you disagree with.")
             : null),
+        sortBar,
         h("div", { class: "rec-cols", "aria-hidden": "true" },
           h("span", {}, "Fund"), h("span", {}, "1Y Return"), h("span", {}, "Absolute Return"), h("span", {}, "Recommendation")),
         rowsSlot),

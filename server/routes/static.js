@@ -1,8 +1,8 @@
-// The website's own files. Credentials and non-website folders are never served; other computers on the
-// network see only the website itself (LAN_ALLOWED).
+// The website's own files. Credentials and non-website folders are never served; a visitor that is not this PC
+// (only possible inside the Docker container) sees only the website itself (REMOTE_ALLOWED).
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { LAN_ALLOWED, MIME, PRIVATE_PATH, ROOT } from "../config.js";
+import { REMOTE_ALLOWED, MIME, PRIVATE_PATH, ROOT } from "../config.js";
 import { send, sendText } from "../lib/http.js";
 
 const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
@@ -14,7 +14,7 @@ export function allowedPath(pathname, isLocalPc) {
   try { relative = decodeURIComponent(pathname).replace(/\\/g, "/").replace(/^\/+/, ""); } catch { return null; }
   if (relative === "") relative = "index.html";
   if (relative.includes("\0") || PRIVATE_PATH.test(relative)) return null;
-  if (!isLocalPc && !LAN_ALLOWED.test(relative)) return null;
+  if (!isLocalPc && !REMOTE_ALLOWED.test(relative)) return null;
   return relative;
 }
 

@@ -40,7 +40,7 @@ test("private files are never served", () => {
   assert.equal(allowedPath("/tests/index.html", true), "tests/index.html");
 });
 
-test("other computers see only the website", () => {
+test("a visitor that is not this PC (only possible in the Docker container) sees only the website", () => {
   assert.equal(allowedPath("/app/main.js", false), "app/main.js");
   assert.equal(allowedPath("/design-system/index.css", false), "design-system/index.css");
   assert.equal(allowedPath("/data/schemes/direct.json", false), "data/schemes/direct.json");
